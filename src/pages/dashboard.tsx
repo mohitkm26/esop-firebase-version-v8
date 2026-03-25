@@ -67,7 +67,7 @@ export default function Dashboard() {
         )}
 
         <div style={{ marginBottom:24 }}>
-          <h1 className="page-title">Good {new Date().getHours()<12?'morning':new Date().getHours()<17?'afternoon':'evening'}, {profile?.name?.split(' ')[0] || 'there'} 👋</h1>
+          <h1 className="page-title">Welcome, {profile?.name?.split(' ')[0] || 'there'} 👋</h1>
           <p className="page-subtitle">{companyData?.companyName} · ESOP Dashboard</p>
         </div>
 
