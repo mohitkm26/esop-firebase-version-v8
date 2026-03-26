@@ -181,19 +181,21 @@ for (const s of schedule) {
             <label className="btn btn-primary btn-sm" style={{ cursor:'pointer' }}>
               📁 Choose CSV File
               <input type="file" accept=".csv" style={{ display:'none' }} onChange={handleFile}/>
-            </label>
-            {file && <span style={{ fontSize:12, color:'var(--text3)' }}>{file.name} · {preview.length} rows</span>}
-          </div>
-          {mode === 'grants' && (
-            <div className="alert alert-info" style={{ fontSize:12 }}>
-              ℹ️ ℹ️ Required columns:
-name, employee_id, personal_email, work_email,
-grant_number, department, joining_date,
-exercise_price, total_options, exit_date,
-vesting_type, vesting_schedule>
-            </div>
-          )}
-        </div>
+       </label>
+{file && <span style={{ fontSize:12, color:'var(--text3)' }}>{file.name} · {preview.length} rows</span>}
+</div>
+
+{mode === 'grants' && (
+  <div className="alert alert-info" style={{ fontSize:12 }}>
+    ℹ️ ℹ️ Required columns:
+    name, employee_id, personal_email, work_email,
+    grant_number, department, joining_date,
+    exercise_price, total_options, exit_date,
+    vesting_type, vesting_schedule
+  </div>
+)}
+
+</div>
 
         {preview.length > 0 && (
           <div className="card mb-4" style={{ padding:0, overflow:'hidden' }}>
