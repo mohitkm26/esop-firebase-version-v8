@@ -20,6 +20,20 @@ export default function Upload() {
   const [importing, setImporting] = useState(false)
   const [done, setDone] = useState(0)
   const [file, setFile] = useState<File|null>(null)
+  const grantsRequiredColumns = [
+    'name',
+    'employee_id',
+    'personal_email',
+    'work_email',
+    'grant_number',
+    'department',
+    'joining_date',
+    'exercise_price',
+    'total_options',
+    'exit_date',
+    'vesting_type',
+    'vesting_schedule',
+  ]
 
   useEffect(() => { if (!loading && !user) router.replace('/login') }, [user, loading])
 
@@ -30,9 +44,9 @@ export default function Upload() {
       // V8 FIX: exercise_price column included
  
      downloadBlob(
-'name,employee_id,personal_email,work_email,grant_number,department,joining_date,exercise_price,total_options,exit_date,vesting_type,vesting_schedule',
-'grants_template.csv'
-)
+        grantsRequiredColumns.join(','),
+        'grants_template.csv'
+      )
     }
   }
 
@@ -188,10 +202,8 @@ for (const s of schedule) {
 {mode === 'grants' && (
   <div className="alert alert-info" style={{ fontSize:12 }}>
     ℹ️ ℹ️ Required columns:
-    name, employee_id, personal_email, work_email,
-    grant_number, department, joining_date,
-    exercise_price, total_options, exit_date,
-    vesting_type, vesting_schedule
+    {' '}
+    <code>{grantsRequiredColumns.join(', ')}</code>
   </div>
 )}
 
