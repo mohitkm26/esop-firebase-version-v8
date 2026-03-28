@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { auth, db } from './firebase'
 import { onAuthStateChanged, User, signOut } from 'firebase/auth'
 import { doc, getDoc, setDoc, getDocs, collection, query, where } from 'firebase/firestore'
+import { findEmployeeByAuthEmail } from './employee-lookup'
 
 export interface Profile {
   uid: string; email: string; name: string; photo: string
@@ -23,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [blocked, setBlocked] = useState(false)
 
   async function loadProfile(u: User) {
+    const normalizedEmail = (u.email || '').trim().toLowerCase()
     const profileRef  = doc(db, 'users', u.uid)
     const profileSnap = await getDoc(profileRef)
 
@@ -39,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const allUsers = await getDocs(collection(db, 'users'))
     if (allUsers.empty) {
       const p: Profile = {
-        uid: u.uid, email: u.email!, name: u.displayName||u.email!,
+        uid: u.uid, email: normalizedEmail, name: u.displayName||normalizedEmail,
         photo: u.photoURL||'', role: 'superAdmin', isActive: true, companyId: 'PLATFORM',
       }
       await setDoc(profileRef, { ...p, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString() })
@@ -48,13 +50,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // C. Check invite
     const inviteSnap = await getDocs(
-      query(collection(db,'invites'), where('email','==',u.email!.toLowerCase()), where('used','==',false))
+      query(collection(db,'invites'), where('email','==',normalizedEmail), where('used','==',false))
     )
     if (!inviteSnap.empty) {
       const inviteDoc = inviteSnap.docs[0]
       const invite = inviteDoc.data()
       const p: Profile = {
-        uid: u.uid, email: u.email!, name: u.displayName||u.email!,
+        uid: u.uid, email: normalizedEmail, name: u.displayName||normalizedEmail,
         photo: u.photoURL||'', role: invite.role||'employee', isActive: true,
         companyId: invite.companyId,
         ...(invite.employeeId ? { employeeId: invite.employeeId } : {}),
@@ -64,18 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(p); return
     }
 
-    // D. Check employees across companies (email match)
-    const [r1, r2] = await Promise.all([
-      getDocs(query(collection(db,'employees'), where('email','==',u.email!))),
-      getDocs(query(collection(db,'employees'), where('officialEmail','==',u.email!))),
-    ])
-    const matchedEmp = [...r1.docs, ...r2.docs][0]
+    // D. Check employees across companies by email mapping.
+    // Priority: work_email -> personal_email (with legacy fallbacks for existing data).
+    const matchedEmp = await findEmployeeByAuthEmail(db, normalizedEmail)
     if (matchedEmp) {
-      const empData = matchedEmp.data()
       const p: Profile = {
-        uid: u.uid, email: u.email!, name: u.displayName||u.email!,
+        uid: u.uid, email: normalizedEmail, name: u.displayName||normalizedEmail,
         photo: u.photoURL||'', role: 'employee', isActive: true,
-        employeeId: matchedEmp.id, companyId: empData.companyId,
+        employeeId: matchedEmp.employeeId, companyId: matchedEmp.companyId,
       }
       await setDoc(profileRef, { ...p, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString() })
       setProfile(p); return
@@ -84,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // E. No match → new company signup → redirect to onboarding
     // Create minimal profile, onboarding will complete it
     const p: Profile = {
-      uid: u.uid, email: u.email!, name: u.displayName||u.email!,
+      uid: u.uid, email: normalizedEmail, name: u.displayName||normalizedEmail,
       photo: u.photoURL||'', role: 'companyAdmin', isActive: true, companyId: u.uid,
     }
     await setDoc(profileRef, { ...p, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString(), needsOnboarding: true })
