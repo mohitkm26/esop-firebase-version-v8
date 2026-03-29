@@ -7,7 +7,6 @@ import { usePlan } from '@/lib/plan-context'
 import Layout from '@/components/layout/Layout'
 import { logAudit } from '@/lib/audit'
 import { canAdmin, ASSIGNABLE_ROLES, ROLE_LABELS, ROLE_COLORS, type Role } from '@/lib/roles'
-import { fmtDate } from '@/lib/utils'
 
 export default function UsersPage() {
   const { user, profile, loading } = useAuth()
@@ -22,18 +21,36 @@ export default function UsersPage() {
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
 
+  const isActiveUser = (u: any) => u?.status === 'active' || (u?.status == null && u?.isActive !== false)
+
   useEffect(() => { if (!loading && !user) router.push('/login') }, [user, loading])
   useEffect(() => {
     if (!user || !companyId) return
     Promise.all([
       getDocs(query(collection(db,'profiles'), where('companyId','==',companyId))),
+      getDocs(query(collection(db,'users'), where('companyId','==',companyId))),
       getDocs(query(collection(db,'invites'), where('companyId','==',companyId), where('used','==',false))),
-    ]).then(([u,i]) => {
-      setUsers(u.docs.map(d=>({id:d.id,...d.data()})))
-      setInvites(i.docs.map(d=>({id:d.id,...d.data()})))
+    ]).then(([profilesSnap, usersSnap, invitesSnap]) => {
+      const fromProfiles = profilesSnap.docs.map(d=>({ id:d.id, sourceCollection:'profiles', ...d.data() }))
+      const fromUsers = usersSnap.docs.map(d=>({ id:d.id, sourceCollection:'users', ...d.data() }))
+
+      // Merge by email so we can display all users even if some records are in `users`
+      // while preserving profile-first data where available.
+      const mergedByEmail = new Map<string, any>()
+      ;[...fromUsers, ...fromProfiles].forEach((u:any) => {
+        const email = (u.email || '').toLowerCase()
+        const key = email || `${u.sourceCollection}:${u.id}`
+        const prev = mergedByEmail.get(key)
+        mergedByEmail.set(key, prev ? { ...prev, ...u } : u)
+      })
+
+      setUsers(Array.from(mergedByEmail.values()))
+      setInvites(invitesSnap.docs.map(d=>({id:d.id,...d.data()})))
       setBusy(false)
     })
   }, [user, companyId])
+
+  const activeUsers = users.filter(isActiveUser)
 
   async function invite() {
     if (!inviteEmail) { setErr('Email is required'); return }
@@ -52,14 +69,22 @@ export default function UsersPage() {
   }
 
   async function changeRole(uid: string, newRole: Role) {
-    await updateDoc(doc(db,'profiles',uid), { role:newRole })
+    const target = users.find(u => u.id === uid)
+    if (!target) return
+    await updateDoc(doc(db, target.sourceCollection || 'profiles', uid), { role:newRole })
     await logAudit({ companyId, userId:user!.uid, userEmail:profile?.email||'', entityType:'user', entityId:uid, action:'user_role_changed', after:{ role:newRole } })
     setUsers(prev=>prev.map(u=>u.id===uid ? {...u,role:newRole} : u))
   }
 
   async function toggleActive(uid: string, isActive: boolean) {
-    await updateDoc(doc(db,'profiles',uid), { isActive:!isActive })
-    setUsers(prev=>prev.map(u=>u.id===uid ? {...u,isActive:!isActive} : u))
+    const target = users.find(u => u.id === uid)
+    if (!target) return
+    const nextActive = !isActive
+    await updateDoc(doc(db, target.sourceCollection || 'profiles', uid), {
+      isActive: nextActive,
+      status: nextActive ? 'active' : 'blocked',
+    })
+    setUsers(prev=>prev.map(u=>u.id===uid ? {...u,isActive:nextActive,status:nextActive?'active':'blocked'} : u))
   }
 
   if (loading || busy) return <div style={{minHeight:'100vh',background:'var(--bg)',display:'flex',alignItems:'center',justifyContent:'center'}}><div className="spinner-lg"/></div>
@@ -71,7 +96,7 @@ export default function UsersPage() {
         <div className="flex items-start justify-between mb-7">
           <div>
             <h1 className="page-title">Users & Access</h1>
-            <p className="text-muted text-sm mt-1">{users.length} active users · {invites.length} pending invites</p>
+            <p className="text-muted text-sm mt-1">{activeUsers.length} active users · {invites.length} pending invites</p>
           </div>
         </div>
 
@@ -128,7 +153,7 @@ export default function UsersPage() {
                 <th className="th">Status</th><th className="th">Actions</th>
               </tr></thead>
               <tbody>
-                {users.map((u:any)=>(
+                {activeUsers.map((u:any)=>(
                   <tr key={u.id}>
                     <td className="td">
                       <div style={{fontWeight:600}}>{u.name}</div>
@@ -145,12 +170,12 @@ export default function UsersPage() {
                       )}
                     </td>
                     <td className="td">
-                      <span className={`badge ${u.isActive?'badge-green':'badge-red'}`}>{u.isActive?'Active':'Blocked'}</span>
+                      <span className="badge badge-green">Active</span>
                     </td>
                     <td className="td">
                       {u.id !== profile?.uid && (
-                        <button onClick={()=>toggleActive(u.id, u.isActive)} className={`btn btn-sm ${u.isActive?'btn-danger':'btn-success'}`}>
-                          {u.isActive ? 'Block' : 'Unblock'}
+                        <button onClick={()=>toggleActive(u.id, true)} className="btn btn-sm btn-danger">
+                          Block
                         </button>
                       )}
                     </td>
