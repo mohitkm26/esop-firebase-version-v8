@@ -3,7 +3,7 @@ import { useRouter } from 'next/router'
 import { auth, db } from '@/lib/firebase'
 import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
 import Link from 'next/link'
-import { findEmployeeEmailByPersonalId } from '@/lib/employee-lookup'
+import { findEmployeeEmailByPersonalId } from '@/lib/personal-id-lookup'
 
 export default function Login() {
   const router = useRouter()
