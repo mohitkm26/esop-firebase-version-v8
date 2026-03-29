@@ -10,6 +10,48 @@ import { logAudit } from '@/lib/audit'
 
 type Mode = 'employees' | 'grants'
 
+
+type ParsedVestingEntry = { vestDate: string; optionsCount: number }
+
+function parseVestingSchedule(raw: string, totalOptions: number): { entries: ParsedVestingEntry[]; error?: string } {
+  if (!raw || !raw.trim()) return { entries: [], error: 'vesting_schedule required' }
+  if (!Number.isFinite(totalOptions) || totalOptions <= 0) return { entries: [], error: 'total_options must be a positive number' }
+
+  const entries: ParsedVestingEntry[] = []
+  let sum = 0
+
+  for (const chunk of raw.split(',')) {
+    const part = chunk.trim()
+    if (!part) continue
+
+    const [datePart, qtyPart, ...extra] = part.split(':').map(v => v.trim())
+    if (!datePart || !qtyPart || extra.length > 0) {
+      return { entries: [], error: `Invalid vesting_schedule format near "${part}". Expected YYYY-MM-DD:quantity` }
+    }
+
+    const parsedDate = parseFlexDate(datePart)
+    if (!parsedDate) {
+      return { entries: [], error: `Invalid vesting date "${datePart}"` }
+    }
+
+    const qty = Number(String(qtyPart).replace(/,/g, ''))
+    if (!Number.isFinite(qty) || qty <= 0) {
+      return { entries: [], error: `Invalid vesting quantity "${qtyPart}"` }
+    }
+
+    entries.push({ vestDate: parsedDate, optionsCount: qty })
+    sum += qty
+  }
+
+  if (!entries.length) return { entries: [], error: 'vesting_schedule has no valid entries' }
+  if (sum !== totalOptions) {
+    return { entries: [], error: `Vesting schedule total (${sum}) must equal total_options (${totalOptions})` }
+  }
+
+  return { entries }
+}
+
+
 export default function Upload() {
   const { user, profile, loading } = useAuth()
   const { companyId } = usePlan()
@@ -110,7 +152,6 @@ if (!r.name) { errs[i]='name required'; continue }
 if (!r.employee_id) { errs[i]='employee_id required'; continue }
 if (!r.total_options) { errs[i]='total_options required'; continue }
 if (!r.vesting_schedule) { errs[i]='vesting_schedule required'; continue }
-          if (!r.total_options) { errs[i]='total_options required'; continue }
           if (!r.exercise_price && r.exercise_price !== '0') { errs[i]='exercise_price required'; continue }
 
           const allNums = [...existingNums, ...newNums]
@@ -118,38 +159,36 @@ if (!r.vesting_schedule) { errs[i]='vesting_schedule required'; continue }
           const grantNumber = generateGrantNumber(allNums, 'G', year)
           newNums.push(grantNumber)
 
-          const cliff = parseInt(r.cliff_months||'12')
-          const period = parseInt(r.vesting_period_months||'48')
+          const totalOptions = parseInt(String(r.total_options).replace(/,/g,''))
+          if (!Number.isFinite(totalOptions) || totalOptions <= 0) { errs[i]='total_options must be a positive number'; continue }
+
+          const vestingCheck = parseVestingSchedule(r.vesting_schedule, totalOptions)
+          if (vestingCheck.error) { errs[i]=vestingCheck.error; continue }
+
           const vestStart = parseFlexDate(r.vesting_start_date)||r.vesting_start_date||r.grant_date||today()
           const exitDate = (emp as any).exitDate || null
 
           const grantRef = await addDoc(collection(db,'companies',companyId,'grants'), {
             grantNumber, employeeId:emp.id, employeeName:(emp as any).name,
             employeeEmail:(emp as any).email, grantDate:parseFlexDate(r.grant_date)||today(),
-            grantType:r.grant_type||'ISO', totalOptions:parseInt(String(r.total_options).replace(/,/g,'')),
+            grantType:r.grant_type||'ISO', totalOptions,
             exercisePrice:parseFloat(r.exercise_price)||0,  // V8 FIX: included
             vestingStartDate:vestStart, status:'issued', locked:false, companyId,
             createdAt:serverTimestamp(), createdBy:user!.uid, updatedAt:serverTimestamp()
           })
 
-          // Generate monthly vesting events
-           const vestStart_ = new Date(vestStart)
-          const schedule = r.vesting_schedule.split(',')
-
-for (const s of schedule) {
-  const [date, qty] = s.trim().split(':')
-  if (!date || !qty) continue
-
-  await addDoc(collection(db,'companies',companyId,'vestingEvents'),{
-    grantId:grantRef.id,
-    employeeId:emp.id,
-    companyId,
-    vestDate:parseFlexDate(date) || date,
-    optionsCount:parseFloat(qty),
-    status:computeVestingStatus(date,exitDate),
-    createdAt:serverTimestamp()
-  })
-} 
+          // Generate vesting events from validated schedule
+          for (const event of vestingCheck.entries) {
+            await addDoc(collection(db,'companies',companyId,'vestingEvents'),{
+              grantId:grantRef.id,
+              employeeId:emp.id,
+              companyId,
+              vestDate:event.vestDate,
+              optionsCount:event.optionsCount,
+              status:computeVestingStatus(event.vestDate,exitDate),
+              createdAt:serverTimestamp()
+            })
+          }
           setDone(d=>d+1)
         } catch(e:any) { errs[i]=e.message }
       }
@@ -214,7 +253,7 @@ for (const s of schedule) {
                     <tr key={i} style={{ background:errors[i]?'rgba(181,63,63,0.05)':done>i?'rgba(45,122,79,0.04)':'' }}>
                       <td style={{ color:'var(--text3)', fontSize:11 }}>{r._row}</td>
                       {Object.entries(r).filter(([k])=>k!=='_row').map(([k,v])=><td key={k} style={{ fontSize:12 }}>{String(v)}</td>)}
-                      <td>{errors[i]?<span className="badge badge-red" title={errors[i]}>Error</span>:done>i?<span className="badge badge-green">✓</span>:<span className="badge badge-muted">Pending</span>}</td>
+                      <td>{errors[i]?<span className="badge badge-red" title={errors[i]}>Error: {errors[i]}</span>:done>i?<span className="badge badge-green">✓</span>:<span className="badge badge-muted">Pending</span>}</td>
                     </tr>
                   ))}
                 </tbody>
