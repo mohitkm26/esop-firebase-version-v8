@@ -1,5 +1,6 @@
 import { usePlan, Feature, Plan, PLAN_LABELS } from '@/lib/plan-context'
 import { ReactNode } from 'react'
+import { requiredPlanForFeature } from '@/lib/feature-gate'
 
 interface Props {
   feature: Feature
@@ -17,7 +18,7 @@ export default function PlanGate({ feature, children, overlay = true }: Props) {
     desc: "Upgrade your plan to use this feature"
   }
 
-  const required = plan
+  const required = requiredPlanForFeature(feature)
 
   if (!overlay) return (
     <div className="card text-center py-10">
