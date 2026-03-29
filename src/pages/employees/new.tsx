@@ -15,7 +15,7 @@ export default function NewEmployee() {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
     name:'', email:'', employeeId:'', department:'', designation:'',
-    joiningDate: today(), esopEligible: true,
+    personal_id:'', joiningDate: today(), esopEligible: true,
   })
 
   useEffect(() => { if (!loading && !user) router.replace('/login') }, [user, loading])
@@ -28,10 +28,15 @@ export default function NewEmployee() {
       // Check for duplicate email
       const dup = await getDocs(query(collection(db,'companies',companyId,'employees'), where('email','==',form.email.toLowerCase())))
       if (!dup.empty) { alert('An employee with this email already exists.'); setSaving(false); return }
+      const normalizedPersonalId = form.personal_id.trim().toLowerCase()
+      if (normalizedPersonalId) {
+        const dupPersonalId = await getDocs(query(collection(db,'companies',companyId,'employees'), where('personal_id','==',normalizedPersonalId)))
+        if (!dupPersonalId.empty) { alert('An employee with this Personal ID already exists.'); setSaving(false); return }
+      }
 
       const now = serverTimestamp()
       const docRef = await addDoc(collection(db,'companies',companyId,'employees'), {
-        ...form, email: form.email.toLowerCase(), companyId,
+        ...form, email: form.email.toLowerCase(), personal_id: normalizedPersonalId || null, companyId,
         status:'active', createdAt: now, updatedAt: now, createdBy: user!.uid,
       })
       await logAudit({ companyId, userId:user!.uid, userEmail:profile?.email||'', action:'employee_created', entityType:'employee', entityId:docRef.id, entityLabel:form.name, after:form })
@@ -67,9 +72,16 @@ export default function NewEmployee() {
                 <input className="input" value={form.employeeId} onChange={e=>F('employeeId')(e.target.value)} placeholder="EMP-001"/>
               </div>
               <div>
+                <label className="label">Personal ID</label>
+                <input className="input" value={form.personal_id} onChange={e=>F('personal_id')(e.target.value)} placeholder="ABCD1234"/>
+              </div>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+              <div>
                 <label className="label">Joining Date</label>
                 <input type="date" className="input" value={form.joiningDate} onChange={e=>F('joiningDate')(e.target.value)}/>
               </div>
+              <div />
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
               <div>
