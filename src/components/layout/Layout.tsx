@@ -7,6 +7,8 @@ import { auth } from '@/lib/firebase'
 import { signOut } from 'firebase/auth'
 import { canAdmin, canFinance, canAudit, isSuperAdmin, isEmployeeOnly } from '@/lib/roles'
 import NotificationBell from '@/components/ui/NotificationBell'
+import UpgradeModal from '@/components/UpgradeModal'
+import { isPlanGated } from '@/lib/feature-gate'
 
 const MAIN_NAV = [
   { href:'/dashboard',      icon:'⊟', label:'Dashboard' },
@@ -40,6 +42,7 @@ export default function Layout({ children, title }: Props) {
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [theme, setTheme] = useState<'light'|'dark'>('light')
+  const [upgradeRequiredPlan, setUpgradeRequiredPlan] = useState<'pro'|'advanced'|null>(null)
 
   useEffect(() => {
     const saved = (typeof localStorage !== 'undefined' && localStorage.getItem('theme')) as 'light'|'dark'|null
@@ -56,12 +59,7 @@ export default function Layout({ children, title }: Props) {
   const role = profile?.role || ''
   const planColor = PLAN_COLORS[plan]
 
-  const isGated = (gate?: 'pro'|'advanced') => {
-    if (!gate) return false
-    if (gate === 'advanced') return plan !== 'advanced'
-    if (gate === 'pro') return plan === 'basic'
-    return false
-  }
+  const isGated = (gate?: 'pro'|'advanced') => gate ? isPlanGated(plan, gate) : false
 
   const Sidebar = () => (
     <aside className="sidebar">
@@ -90,8 +88,15 @@ export default function Layout({ children, title }: Props) {
               const locked = isGated(n.gate)
               const active = router.pathname === n.href || router.pathname.startsWith(n.href+'/')
               return (
-                <Link key={n.href} href={locked ? '/pricing' : n.href}
+                <Link
+                  key={n.href}
+                  href={n.href}
                   className={`sidebar-link${active?' active':''}`} style={locked?{opacity:0.45}:{}}
+                  onClick={(e) => {
+                    if (!locked || !n.gate) return
+                    e.preventDefault()
+                    setUpgradeRequiredPlan(n.gate)
+                  }}
                 >
                   <span style={{ fontSize:13, width:18, textAlign:'center', flexShrink:0 }}>{n.icon}</span>
                   <span style={{ flex:1 }}>{n.label}</span>
@@ -173,6 +178,11 @@ export default function Layout({ children, title }: Props) {
 
   return (
     <div className="sidebar-layout">
+      <UpgradeModal
+        open={Boolean(upgradeRequiredPlan)}
+        requiredPlan={upgradeRequiredPlan || 'pro'}
+        onClose={() => setUpgradeRequiredPlan(null)}
+      />
       <div style={{ width:'var(--sidebar-w)', flexShrink:0, position:'fixed', top:0, left:0, bottom:0, zIndex:40 }}>
         <Sidebar/>
       </div>

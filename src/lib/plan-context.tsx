@@ -2,18 +2,13 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { db } from './firebase'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { useAuth } from './auth-context'
+import { hasFeatureAccess } from './feature-gate'
 
 export type Plan = 'basic' | 'pro' | 'advanced'
 
 export type Feature =
   | 'valuation' | 'esop_cost' | 'reports' | 'audit_logs'
   | 'bulk_upload' | 'email_letters' | 'employee_portal_auth'
-
-const PLAN_FEATURES: Record<Plan, Feature[]> = {
-  basic:    ['bulk_upload'],
-  pro:      ['bulk_upload','email_letters','valuation','employee_portal_auth','reports'],
-  advanced: ['bulk_upload','email_letters','valuation','employee_portal_auth','reports','esop_cost','audit_logs'],
-}
 
 export interface CompanyData {
   companyName?: string; logoUrl?: string; letterheadUrl?: string
@@ -71,7 +66,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     loadCompany(cid).finally(() => setLoading(false))
   }, [user, profile, authLoading])
 
-  const can = (f: Feature) => PLAN_FEATURES[plan].includes(f)
+  const can = (f: Feature) => hasFeatureAccess(plan, f)
   return <Ctx.Provider value={{ plan, companyId, companyData, loading, can, refreshCompany }}>{children}</Ctx.Provider>
 }
 
