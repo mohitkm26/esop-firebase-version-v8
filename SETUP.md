@@ -58,7 +58,7 @@ companies/{companyId}/notifications
 companies/{companyId}/tickets
 
 users/{uid}        ← global user profiles
-invites/{id}       ← pending invites
+invites/{id}       ← invite links + delivery status (token, status, inviteLink, emailStatus)
 contact_requests/  ← public contact form submissions
 ```
 

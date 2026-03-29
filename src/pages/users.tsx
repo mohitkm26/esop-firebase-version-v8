@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { db } from '@/lib/firebase'
-import { collection, getDocs, query, where, doc, updateDoc, addDoc } from 'firebase/firestore'
+import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore'
 import { useAuth } from '@/lib/auth-context'
 import { usePlan } from '@/lib/plan-context'
 import Layout from '@/components/layout/Layout'
 import { logAudit } from '@/lib/audit'
 import { canAdmin, ASSIGNABLE_ROLES, ROLE_LABELS, ROLE_COLORS, type Role } from '@/lib/roles'
+import { createInviteRecord, sendInviteEmail } from '@/lib/invites'
 
 export default function UsersPage() {
   const { user, profile, loading } = useAuth()
@@ -29,7 +30,7 @@ export default function UsersPage() {
     Promise.all([
       getDocs(query(collection(db,'profiles'), where('companyId','==',companyId))),
       getDocs(query(collection(db,'users'), where('companyId','==',companyId))),
-      getDocs(query(collection(db,'invites'), where('companyId','==',companyId), where('used','==',false))),
+      getDocs(query(collection(db,'invites'), where('companyId','==',companyId), where('status','==','pending'))),
     ]).then(([profilesSnap, usersSnap, invitesSnap]) => {
       const fromProfiles = profilesSnap.docs.map(d=>({ id:d.id, sourceCollection:'profiles', ...d.data() }))
       const fromUsers = usersSnap.docs.map(d=>({ id:d.id, sourceCollection:'users', ...d.data() }))
@@ -57,15 +58,55 @@ export default function UsersPage() {
     setInviting(true); setErr(''); setMsg('')
     const existing = users.find(u => u.email?.toLowerCase() === inviteEmail.toLowerCase())
     if (existing) { setErr('User already has access.'); setInviting(false); return }
-    const now = new Date().toISOString()
-    const inviteRef = await addDoc(collection(db,'invites'), {
-      email: inviteEmail.toLowerCase(), role: inviteRole,
-      companyId, invitedBy: user!.uid, used: false, createdAt: now,
-    })
-    await logAudit({ companyId, userId:user!.uid, userEmail:profile?.email||'', entityType:'user', entityId:inviteRef.id, action:'user_invited', after:{ email:inviteEmail, role:inviteRole } })
-    setInvites(prev=>[...prev, { id:inviteRef.id, email:inviteEmail, role:inviteRole, used:false, createdAt:now }])
-    setMsg(`Invite created for ${inviteEmail}. Share the login link with them.`)
-    setInviteEmail(''); setInviting(false)
+    try {
+      const invite = await createInviteRecord(db, {
+        companyId,
+        email: inviteEmail,
+        role: inviteRole,
+        invitedBy: user!.uid,
+        inviteKind: 'user',
+      })
+
+      const emailResult = await sendInviteEmail({
+        email: inviteEmail.toLowerCase(),
+        role: inviteRole,
+        inviteLink: invite.inviteLink,
+        inviteKind: 'user',
+        companyId,
+      })
+
+      await updateDoc(doc(db, 'invites', invite.id), {
+        sentAt: new Date().toISOString(),
+        lastSendAttemptAt: new Date().toISOString(),
+        emailStatus: emailResult.sent ? 'sent' : emailResult.status,
+      })
+
+      await logAudit({
+        companyId,
+        userId:user!.uid,
+        userEmail:profile?.email||'',
+        entityType:'user',
+        entityId:invite.id,
+        action:'user_invited',
+        after:{ email:inviteEmail, role:inviteRole, inviteLink: invite.inviteLink },
+      })
+
+      setInvites(prev=>[...prev, {
+        id: invite.id,
+        email: inviteEmail.toLowerCase(),
+        role: inviteRole,
+        used: false,
+        status: 'pending',
+        createdAt: invite.createdAt,
+        inviteLink: invite.inviteLink,
+      }])
+      setMsg(`Invite generated for ${inviteEmail}. Link: ${invite.inviteLink}`)
+      setInviteEmail('')
+    } catch (e: any) {
+      setErr(e.message || 'Failed to create invite')
+    } finally {
+      setInviting(false)
+    }
   }
 
   async function changeRole(uid: string, newRole: Role) {

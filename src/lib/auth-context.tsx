@@ -25,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function loadProfile(u: User) {
     const normalizedEmail = (u.email || '').trim().toLowerCase()
+    const pendingInviteToken = typeof window !== 'undefined' ? sessionStorage.getItem('pendingInviteToken') : null
     const profileRef  = doc(db, 'users', u.uid)
     const profileSnap = await getDoc(profileRef)
 
@@ -49,9 +50,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // C. Check invite
-    const inviteSnap = await getDocs(
-      query(collection(db,'invites'), where('email','==',normalizedEmail), where('used','==',false))
-    )
+    const inviteQuery = pendingInviteToken
+      ? query(
+        collection(db,'invites'),
+        where('email','==',normalizedEmail),
+        where('token','==',pendingInviteToken),
+        where('status','==','pending')
+      )
+      : query(collection(db,'invites'), where('email','==',normalizedEmail), where('status','==','pending'))
+
+    const inviteSnap = await getDocs(inviteQuery)
     if (!inviteSnap.empty) {
       const inviteDoc = inviteSnap.docs[0]
       const invite = inviteDoc.data()
@@ -62,7 +70,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ...(invite.employeeId ? { employeeId: invite.employeeId } : {}),
       }
       await setDoc(profileRef, { ...p, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString() })
-      await setDoc(inviteDoc.ref, { ...invite, used: true, usedAt: new Date().toISOString() })
+      await setDoc(inviteDoc.ref, {
+        ...invite,
+        used: true,
+        status: 'accepted',
+        usedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+      if (typeof window !== 'undefined') sessionStorage.removeItem('pendingInviteToken')
       setProfile(p); return
     }
 
