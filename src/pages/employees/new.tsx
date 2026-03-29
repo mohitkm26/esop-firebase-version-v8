@@ -7,6 +7,7 @@ import { usePlan } from '@/lib/plan-context'
 import Layout from '@/components/layout/Layout'
 import { logAudit } from '@/lib/audit'
 import { today } from '@/lib/utils'
+import { createInviteRecord, sendInviteEmail } from '@/lib/invites'
 
 export default function NewEmployee() {
   const { user, profile, loading } = useAuth()
@@ -38,6 +39,36 @@ export default function NewEmployee() {
       const docRef = await addDoc(collection(db,'companies',companyId,'employees'), {
         ...form, email: form.email.toLowerCase(), personal_id: normalizedPersonalId || null, companyId,
         status:'active', createdAt: now, updatedAt: now, createdBy: user!.uid,
+      })
+      const invite = await createInviteRecord(db, {
+        companyId,
+        email: form.email.toLowerCase(),
+        role: 'employee',
+        invitedBy: user!.uid,
+        inviteKind: 'employee',
+        employeeId: docRef.id,
+      })
+      const emailResult = await sendInviteEmail({
+        email: form.email.toLowerCase(),
+        role: 'employee',
+        inviteLink: invite.inviteLink,
+        inviteKind: 'employee',
+        companyId,
+      })
+
+      await addDoc(collection(db,'companies',companyId,'auditLogs'), {
+        action: 'employee_invite_sent',
+        companyId,
+        actorUserId: user!.uid,
+        actorEmail: profile?.email || '',
+        entityType: 'invite',
+        entityId: invite.id,
+        createdAt: now,
+        metadata: {
+          employeeId: docRef.id,
+          inviteLink: invite.inviteLink,
+          emailStatus: emailResult.status,
+        },
       })
       await logAudit({ companyId, userId:user!.uid, userEmail:profile?.email||'', action:'employee_created', entityType:'employee', entityId:docRef.id, entityLabel:form.name, after:form })
       router.push(`/employees/${docRef.id}`)

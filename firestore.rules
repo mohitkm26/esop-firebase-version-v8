@@ -23,8 +23,13 @@ service cloud.firestore {
       allow write: if isSignedIn() && (request.auth.uid == uid || isSuperAdmin());
     }
     match /invites/{id} {
-      allow read: if isSignedIn();
-      allow write: if isSuperAdmin() || (isSignedIn() && isAdmin(resource.data.companyId));
+      allow read: if isSignedIn() && (
+        isSuperAdmin() ||
+        resource.data.companyId == getUser().companyId ||
+        resource.data.email == request.auth.token.email
+      );
+      allow create: if isSuperAdmin() || (isSignedIn() && isAdmin(request.resource.data.companyId));
+      allow update, delete: if isSuperAdmin() || (isSignedIn() && isAdmin(resource.data.companyId));
     }
     match /contact_requests/{id} {
       allow create: if true;

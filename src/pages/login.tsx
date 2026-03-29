@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { auth, db } from '@/lib/firebase'
 import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
@@ -13,6 +13,18 @@ export default function Login() {
   const [error, setError]     = useState('')
   const [msg, setMsg]         = useState('')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!router.isReady) return
+    const inviteToken = typeof router.query.invite === 'string' ? router.query.invite : ''
+    const inviteEmail = typeof router.query.email === 'string' ? router.query.email.toLowerCase() : ''
+    if (inviteToken && typeof window !== 'undefined') {
+      sessionStorage.setItem('pendingInviteToken', inviteToken)
+      if (inviteEmail) setIdentifier(inviteEmail)
+      setMsg('Invite link detected. Sign in or sign up with your invited email to accept access.')
+      setMode('signin')
+    }
+  }, [router.isReady, router.query.email, router.query.invite])
 
   async function googleLogin() {
     setLoading(true); setError('')
