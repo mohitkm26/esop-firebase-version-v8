@@ -3,11 +3,12 @@ import { useRouter } from 'next/router'
 import { auth, db } from '@/lib/firebase'
 import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
 import Link from 'next/link'
+import { findEmployeeEmailByPersonalId } from '@/lib/employee-lookup'
 
 export default function Login() {
   const router = useRouter()
   const [mode, setMode] = useState<'signin'|'signup'|'reset'>('signin')
-  const [email, setEmail]     = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError]     = useState('')
   const [msg, setMsg]         = useState('')
@@ -25,15 +26,37 @@ export default function Login() {
   async function emailAuth(e: React.FormEvent) {
     e.preventDefault(); setLoading(true); setError('')
     try {
+      const normalizedInput = identifier.trim().toLowerCase()
+      const isEmailInput = normalizedInput.includes('@')
       if (mode === 'reset') {
-        await sendPasswordResetEmail(auth, email)
+        if (!isEmailInput) {
+          setError('Password reset requires an email address.')
+          setLoading(false)
+          return
+        }
+        await sendPasswordResetEmail(auth, normalizedInput)
         setMsg('Password reset email sent. Check your inbox.')
         setMode('signin')
       } else if (mode === 'signup') {
-        await createUserWithEmailAndPassword(auth, email, password)
+        if (!isEmailInput) {
+          setError('Signup requires a valid email address.')
+          setLoading(false)
+          return
+        }
+        await createUserWithEmailAndPassword(auth, normalizedInput, password)
         router.replace('/')
       } else {
-        await signInWithEmailAndPassword(auth, email, password)
+        const signInEmail = isEmailInput
+          ? normalizedInput
+          : await findEmployeeEmailByPersonalId(db, normalizedInput)
+
+        if (!signInEmail) {
+          setError('No employee record found for this Personal ID.')
+          setLoading(false)
+          return
+        }
+
+        await signInWithEmailAndPassword(auth, signInEmail, password)
         router.replace('/')
       }
     } catch(e:any) {
@@ -111,8 +134,16 @@ export default function Login() {
 
           <form onSubmit={emailAuth} style={{ display:'flex', flexDirection:'column', gap:14 }}>
             <div>
-              <label className="label">Email</label>
-              <input type="email" className="input" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@company.com" required autoComplete="email"/>
+              <label className="label">{mode === 'signin' ? 'Email or Personal ID' : 'Email'}</label>
+              <input
+                type={mode === 'signin' ? 'text' : 'email'}
+                className="input"
+                value={identifier}
+                onChange={e=>setIdentifier(e.target.value)}
+                placeholder={mode === 'signin' ? 'you@company.com or personal ID' : 'you@company.com'}
+                required
+                autoComplete="email"
+              />
             </div>
             {mode !== 'reset' && (
               <div>

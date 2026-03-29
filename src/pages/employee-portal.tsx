@@ -9,6 +9,7 @@ import { fmtN, fmtC, fmtDate, getLatestValuation, computeVesting, computeVesting
 import Head from 'next/head'
 
 const G = (color: string, opacity=1) => `rgba(${color},${opacity})`
+const EMPLOYEE_LINK_ERROR = 'Your sign-in email is not linked to any employee record (work_email or personal_email). Please contact HR to update your details.'
 
 export default function EmployeePortal() {
   const { user, profile, loading } = useAuth()
@@ -32,7 +33,7 @@ export default function EmployeePortal() {
       router.replace('/dashboard'); return
     }
     if (profile.role === 'employee' && profile.employeeId) loadData(profile.employeeId)
-    else setErr('Your email is not linked to an employee record. Contact HR.')
+    else setErr(EMPLOYEE_LINK_ERROR)
   }, [user, profile, loading])
 
   async function loadData(empId: string) {

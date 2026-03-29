@@ -41,10 +41,26 @@ export default function EmployeeDetail() {
   async function saveEdit() {
     if (!id || !companyId) return
     setSaving(true)
-    const before = { ...emp }
-    await updateDoc(doc(db,'companies',companyId,'employees',id), { ...form, updatedAt: serverTimestamp() })
-    await logAudit({ companyId, userId:user!.uid, userEmail:profile?.email||'', action:'employee_updated', entityType:'employee', entityId:id, entityLabel:form.name, before, after:form })
-    setEmp({ ...form }); setEditing(false); setSaving(false)
+    try {
+      const before = { ...emp }
+      const normalizedPersonalId = (form.personal_id || '').trim().toLowerCase()
+      if (normalizedPersonalId) {
+        const dupPersonalId = await getDocs(query(collection(db,'companies',companyId,'employees'), where('personal_id','==',normalizedPersonalId)))
+        const hasDuplicate = dupPersonalId.docs.some(d => d.id !== id)
+        if (hasDuplicate) {
+          alert('Another employee already uses this Personal ID.')
+          setSaving(false)
+          return
+        }
+      }
+
+      const nextForm = { ...form, personal_id: normalizedPersonalId || null }
+      await updateDoc(doc(db,'companies',companyId,'employees',id), { ...nextForm, updatedAt: serverTimestamp() })
+      await logAudit({ companyId, userId:user!.uid, userEmail:profile?.email||'', action:'employee_updated', entityType:'employee', entityId:id, entityLabel:nextForm.name, before, after:nextForm })
+      setEmp({ ...nextForm }); setForm(nextForm); setEditing(false)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function markExit() {
@@ -88,7 +104,7 @@ export default function EmployeeDetail() {
         <div className="card mb-4">
           {editing ? (
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
-              {[['name','Name'],['email','Email'],['employeeId','Employee ID'],['department','Department'],['designation','Designation'],['joiningDate','Joining Date']].map(([k,label]) => (
+              {[['name','Name'],['email','Email'],['employeeId','Employee ID'],['personal_id','Personal ID'],['department','Department'],['designation','Designation'],['joiningDate','Joining Date']].map(([k,label]) => (
                 <div key={k}>
                   <label className="label">{label}</label>
                   <input type={k==='joiningDate'?'date':'text'} className="input" value={form[k]||''} onChange={e=>setForm((f:any)=>({...f,[k]:e.target.value}))}/>
@@ -101,7 +117,7 @@ export default function EmployeeDetail() {
             </div>
           ) : (
             <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:16 }}>
-              {[['Email',emp.email],['Department',emp.department||'—'],['Designation',emp.designation||'—'],['Joining Date',fmtDate(emp.joiningDate)],['Employee ID',emp.employeeId||'—'],['Exit Date',emp.exitDate?fmtDate(emp.exitDate):'—']].map(([k,v]) => (
+              {[['Email',emp.email],['Personal ID',emp.personal_id||'—'],['Department',emp.department||'—'],['Designation',emp.designation||'—'],['Joining Date',fmtDate(emp.joiningDate)],['Employee ID',emp.employeeId||'—'],['Exit Date',emp.exitDate?fmtDate(emp.exitDate):'—']].map(([k,v]) => (
                 <div key={k}><div className="text-xs text-muted" style={{ marginBottom:2 }}>{k}</div><div style={{ fontWeight:600, fontSize:13 }}>{v}</div></div>
               ))}
             </div>
