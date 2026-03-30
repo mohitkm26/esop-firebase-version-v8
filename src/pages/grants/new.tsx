@@ -10,6 +10,7 @@ import { logAudit } from '@/lib/audit'
 import { createNotification } from '@/lib/utils'
 import { canEdit } from '@/lib/roles'
 import { fmtN } from '@/lib/utils'
+import { sendGrantLetterEmail } from '@/lib/email'
 
 export default function NewGrant() {
   const { user, profile, loading } = useAuth()
@@ -85,6 +86,37 @@ export default function NewGrant() {
           status: computeVestingStatus(d, exitDate), createdAt:serverTimestamp()
         })
       }
+
+
+      const grantEmailResult = await sendGrantLetterEmail({
+        to: selEmp.email,
+        employeeName: selEmp.name,
+        companyId,
+        grant: {
+          grantNumber,
+          grantDate: form.grantDate,
+          grantType: form.grantType,
+          totalOptions,
+          exercisePrice,
+        },
+      })
+
+      await addDoc(collection(db,'companies',companyId,'auditLogs'), {
+        action: 'grant_letter_email_attempted',
+        companyId,
+        actorUserId: user!.uid,
+        actorEmail: profile?.email || '',
+        entityType: 'grant',
+        entityId: grantRef.id,
+        createdAt: serverTimestamp(),
+        metadata: {
+          employeeId: form.employeeId,
+          employeeEmail: selEmp.email,
+          emailProvider: grantEmailResult.provider,
+          emailStatus: grantEmailResult.status,
+          emailError: grantEmailResult.error || null,
+        },
+      })
 
       // Find employee's user account to send notification
       const usersSnap = await getDocs(query(collection(db,'users'), where('companyId','==',companyId), where('role','==','employee')))

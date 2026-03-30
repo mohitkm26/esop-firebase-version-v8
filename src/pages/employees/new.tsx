@@ -54,6 +54,7 @@ export default function NewEmployee() {
         inviteLink: invite.inviteLink,
         inviteKind: 'employee',
         companyId,
+        employeeName: form.name,
       })
 
       await addDoc(collection(db,'companies',companyId,'auditLogs'), {

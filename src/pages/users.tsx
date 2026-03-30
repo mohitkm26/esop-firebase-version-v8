@@ -73,6 +73,7 @@ export default function UsersPage() {
         inviteLink: invite.inviteLink,
         inviteKind: 'user',
         companyId,
+        employeeName: inviteEmail.split('@')[0] || 'there',
       })
 
       await updateDoc(doc(db, 'invites', invite.id), {
