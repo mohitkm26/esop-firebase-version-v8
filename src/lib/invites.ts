@@ -1,5 +1,6 @@
 import { addDoc, collection } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
+import { sendEmail } from '@/lib/email'
 
 export type InviteKind = 'user' | 'employee'
 
@@ -18,6 +19,7 @@ export interface InviteEmailPayload {
   inviteLink: string
   inviteKind: InviteKind
   companyId: string
+  employeeName: string
 }
 
 function randomHex(bytes = 16) {
@@ -73,20 +75,20 @@ export async function createInviteRecord(db: Firestore, input: CreateInviteInput
 }
 
 export async function sendInviteEmail(payload: InviteEmailPayload) {
-  // Placeholder for future SendGrid (or any transactional provider) integration.
-  // This function still executes so the invite flow remains complete and traceable.
-  console.info('[invite:mock-send]', {
-    provider: 'mock',
+  const result = await sendEmail({
+    type: 'invite',
     to: payload.email,
     role: payload.role,
     inviteKind: payload.inviteKind,
+    employeeName: payload.employeeName,
+    loginLink: payload.inviteLink,
     companyId: payload.companyId,
-    inviteLink: payload.inviteLink,
   })
 
   return {
-    provider: 'mock',
-    sent: false,
-    status: 'queued-placeholder' as const,
+    provider: result.provider,
+    sent: result.ok,
+    status: result.status,
+    error: result.error,
   }
 }
