@@ -1,7 +1,8 @@
-import { Auth, isSignInWithEmailLink, signInWithEmailLink } from 'firebase/auth'
+import { Auth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'
 import { Firestore, collection, getDocs, limit, query, where } from 'firebase/firestore'
 
 const EMAIL_FOR_SIGN_IN_KEY = 'emailForSignIn'
+const INVITE_TOKEN_KEY = 'pendingInviteToken'
 
 function normalizeEmail(email?: string | null): string {
   return (email || '').trim().toLowerCase()
@@ -22,7 +23,14 @@ export function getEmailForInviteSignIn(fallbackEmail?: string | null): string {
   return storedEmail || fallback
 }
 
-export function clearEmailForInviteSignIn() {
+export function storeInviteToken(token?: string | null) {
+  if (typeof window === 'undefined') return
+  const normalizedToken = (token || '').trim()
+  if (!normalizedToken) return
+  window.localStorage.setItem(INVITE_TOKEN_KEY, normalizedToken)
+}
+
+export function clearInviteLoginStorage() {
   if (typeof window === 'undefined') return
   window.localStorage.removeItem(EMAIL_FOR_SIGN_IN_KEY)
 }
@@ -44,22 +52,52 @@ export async function validateInviteToken(db: Firestore, token?: string | null, 
   return !inviteSnap.empty
 }
 
-interface CompleteInviteSignInInput {
+interface HandleInviteLoginInput {
   auth: Auth
+  db: Firestore
   email?: string | null
-  href: string
+  inviteToken?: string | null
+  tempPassword?: string
 }
 
-export async function completeInviteEmailLinkSignIn(input: CompleteInviteSignInInput) {
-  const normalizedEmail = normalizeEmail(input.email)
-  if (!normalizedEmail) {
-    throw new Error('Could not determine your invite email. Please use manual sign in.')
+export async function handleInviteLogin(input: HandleInviteLoginInput) {
+  const inviteEmail = getEmailForInviteSignIn(input.email)
+  const inviteToken = (input.inviteToken || '').trim()
+  const tempPassword = input.tempPassword || 'Temp@123456'
+
+  if (!inviteEmail) {
+    throw new Error('Invite email is missing. Please use manual sign in.')
   }
 
-  if (!isSignInWithEmailLink(input.auth, input.href)) {
-    throw new Error('This invite link is invalid or expired. Please request a new invite link.')
+  if (inviteToken) {
+    const validInvite = await validateInviteToken(input.db, inviteToken, inviteEmail)
+    if (!validInvite) {
+      throw new Error('Invite token is invalid or expired. Please request a new invite.')
+    }
   }
 
-  await signInWithEmailLink(input.auth, normalizedEmail, input.href)
-  clearEmailForInviteSignIn()
+  try {
+    await signInWithEmailAndPassword(input.auth, inviteEmail, tempPassword)
+    console.info('[invite-login] Existing user auto-login succeeded', { inviteEmail })
+  } catch (signInError: any) {
+    console.info('[invite-login] Sign-in failed, attempting invite account bootstrap', {
+      inviteEmail,
+      code: signInError?.code || 'unknown',
+    })
+
+    try {
+      await createUserWithEmailAndPassword(input.auth, inviteEmail, tempPassword)
+      console.info('[invite-login] Invite user created', { inviteEmail })
+    } catch (createError: any) {
+      if (createError?.code === 'auth/email-already-in-use') {
+        throw new Error('Account exists but could not be auto-logged in. Please sign in manually.')
+      }
+      throw createError
+    }
+
+    await signInWithEmailAndPassword(input.auth, inviteEmail, tempPassword)
+    console.info('[invite-login] Invite user signed in after creation', { inviteEmail })
+  }
+
+  clearInviteLoginStorage()
 }

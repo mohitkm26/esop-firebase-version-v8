@@ -4,7 +4,7 @@ import { auth, db } from '@/lib/firebase'
 import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, isSignInWithEmailLink } from 'firebase/auth'
 import Link from 'next/link'
 import { findEmployeeEmailByPersonalId } from '@/lib/personal-id-lookup'
-import { completeInviteEmailLinkSignIn, getEmailForInviteSignIn, storeEmailForInviteSignIn, validateInviteToken } from '@/lib/invite-login'
+import { handleInviteLogin, storeEmailForInviteSignIn, storeInviteToken } from '@/lib/invite-login'
 
 export default function Login() {
   const router = useRouter()
@@ -33,24 +33,15 @@ export default function Login() {
       sessionStorage.setItem('pendingInviteToken', inviteToken)
       storeEmailForInviteSignIn(inviteEmail)
 
-      const href = window.location.href
-      if (!isSignInWithEmailLink(auth, href)) {
-        setError('This invite URL is missing required sign-in details. Please use the latest invite link from your email.')
-        return
-      }
+      storeInviteToken(inviteToken)
+      console.info('[invite-login] Invite detected', { inviteEmail, inviteToken })
 
       setInviteAuthInProgress(true)
       setError('')
       setMsg('Setting up your account...')
 
       try {
-        const emailForSignIn = getEmailForInviteSignIn(inviteEmail)
-        const tokenIsValid = await validateInviteToken(db, inviteToken, emailForSignIn)
-        if (!tokenIsValid) {
-          throw new Error('Invite token is invalid or already used. Please request a new invite from your admin.')
-        }
-
-        await completeInviteEmailLinkSignIn({ auth, email: emailForSignIn, href })
+        await handleInviteLogin({ auth, db, email: inviteEmail, inviteToken })
         await router.replace('/dashboard')
       } catch (e: any) {
         setError(e?.message || 'We could not complete invite sign-in. You can continue with manual login.')
