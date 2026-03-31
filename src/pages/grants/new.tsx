@@ -62,6 +62,10 @@ export default function NewGrant() {
       const totalOptions = parseInt(form.totalOptions)
       const exercisePrice = parseFloat(form.exercisePrice)||0
       const exitDate = selEmp?.exitDate || null
+      const companySnap = await getDoc(doc(db,'companies',companyId))
+      const company = companySnap.exists() ? companySnap.data() as any : null
+      const grantTemplateUrl = company?.grant_template_url || company?.grantTemplateUrl || ''
+      const grantTemplateName = company?.grant_template_name || company?.grantTemplateName || ''
 
       // Calculate expiry date
       const expiryDays = companyData?.grantExpiryDays || 30
@@ -74,6 +78,10 @@ export default function NewGrant() {
         grantType:form.grantType, totalOptions, exercisePrice,
         vestingStartDate: form.vestingStartDate, status:'issued',
         locked:false, notes:form.notes||null, companyId,
+        grant_template_url: grantTemplateUrl || null,
+        grant_template_name: grantTemplateName || null,
+        grantTemplateUrl: grantTemplateUrl || null,
+        grantTemplateName: grantTemplateName || null,
         expiresAt: expiresAt.toISOString(), exercised:0,
         createdBy:user!.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp()
       })

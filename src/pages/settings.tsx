@@ -8,6 +8,7 @@ import { usePlan } from '@/lib/plan-context'
 import Layout from '@/components/layout/Layout'
 import { logAudit } from '@/lib/audit'
 import { canAdmin } from '@/lib/roles'
+import { uploadGrantTemplate } from '@/lib/grant-template'
 
 export default function Settings() {
   const { user, profile, loading } = useAuth()
@@ -21,8 +22,10 @@ export default function Settings() {
   })
   const [saving, setSaving] = useState(false)
   const [ok, setOk] = useState('')
+  const [warn, setWarn] = useState('')
   const [logoUploading,      setLogoUploading]      = useState(false)
   const [letterheadUploading,setLetterheadUploading]= useState(false)
+  const [templateUploading, setTemplateUploading] = useState(false)
 
   useEffect(() => { if (!loading && !user) router.push('/login') }, [user, loading])
   useEffect(() => {
@@ -81,6 +84,26 @@ export default function Settings() {
     else setLetterheadUploading(false)
   }
 
+  async function uploadGrantTermsTemplate(file: File) {
+    if (!companyId) return
+    setWarn('')
+    setTemplateUploading(true)
+    try {
+      const url = await uploadGrantTemplate(file, companyId)
+      await setDoc(doc(db,'companies',companyId), {
+        grant_template_url: url,
+        grant_template_name: file.name,
+        grantTemplateUrl: url,
+        grantTemplateName: file.name,
+      }, { merge: true })
+      await refreshCompany()
+      setOk('Grant template uploaded successfully')
+    } catch (e:any) {
+      setWarn(e?.message || 'Failed to upload grant template.')
+    }
+    setTemplateUploading(false)
+  }
+
   const set = (k: string, v: string) => setForm(f=>({...f,[k]:v}))
 
   if (loading || !profile || !companyId) return <div style={{minHeight:'100vh',background:'var(--bg)',display:'flex',alignItems:'center',justifyContent:'center'}}><div className="spinner-lg"/></div>
@@ -91,6 +114,7 @@ export default function Settings() {
       <div className="p-8" style={{maxWidth:640}}>
         <h1 className="page-title mb-7">Company Settings</h1>
         {ok && <div className="alert-success mb-5">{ok}</div>}
+        {warn && <div className="alert alert-danger mb-5">{warn}</div>}
 
         <div className="card mb-5">
           <h2 className="section-title mb-4">Branding</h2>
@@ -111,6 +135,37 @@ export default function Settings() {
                 <input type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ if(e.target.files?.[0]) uploadFile(e.target.files[0],'letterhead') }}/>
               </label>
             </div>
+          </div>
+        </div>
+
+        <div className="card mb-5">
+          <h2 className="section-title mb-4">Grant Letter Template</h2>
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            <div style={{ fontSize:13 }}>
+              Current template:{' '}
+              <strong>{(companyData as any)?.grant_template_name || (companyData as any)?.grantTemplateName || 'None uploaded'}</strong>
+            </div>
+            {((companyData as any)?.grant_template_url || (companyData as any)?.grantTemplateUrl) && (
+              <a
+                className="btn btn-ghost btn-sm"
+                href={(companyData as any)?.grant_template_url || (companyData as any)?.grantTemplateUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{ width:'fit-content' }}
+              >
+                ⬇️ Download template
+              </a>
+            )}
+            <label className="btn btn-secondary btn-sm" style={{ cursor:'pointer', width:'fit-content' }}>
+              {templateUploading ? '⏳ Uploading...' : 'Replace template (.docx)'}
+              <input
+                type="file"
+                accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                style={{ display:'none' }}
+                onChange={e=>{ if (e.target.files?.[0]) uploadGrantTermsTemplate(e.target.files[0]) }}
+              />
+            </label>
+            <div style={{ fontSize:11, color:'var(--warning)' }}>⚠️ This will apply to all future grants only</div>
           </div>
         </div>
 
