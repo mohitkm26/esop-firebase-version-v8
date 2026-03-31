@@ -13,7 +13,8 @@ const firebaseConfig = {
 }
 
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig)
+const isBrowser = typeof window !== 'undefined'
 
-export const auth    = getAuth(app)
+export const auth    = isBrowser ? getAuth(app) : (null as any)
 export const db      = getFirestore(app)
 export const storage = getStorage(app)
