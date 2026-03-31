@@ -1,6 +1,7 @@
 import { addDoc, collection } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 import { sendEmail } from '@/lib/email'
+import { storeEmailForInviteSignIn } from '@/lib/invite-login'
 
 export type InviteKind = 'user' | 'employee'
 
@@ -75,6 +76,8 @@ export async function createInviteRecord(db: Firestore, input: CreateInviteInput
 }
 
 export async function sendInviteEmail(payload: InviteEmailPayload) {
+  storeEmailForInviteSignIn(payload.email)
+
   const result = await sendEmail({
     type: 'invite',
     to: payload.email,
