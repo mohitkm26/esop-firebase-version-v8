@@ -12,11 +12,15 @@ export type Feature =
 
 export interface CompanyData {
   companyName?: string; logoUrl?: string; letterheadUrl?: string
+  id?: string; name?: string
   address?: string; signatoryName?: string; signatoryTitle?: string
   plan: Plan; planExpiry?: string|null; onboarded?: boolean
   currency?: string; tandcTemplate?: string
   grantExpiryDays?: number; vestingCliff?: number; vestingPeriod?: number
   exerciseWindowDays?: number
+  grant_template_url?: string; grant_template_name?: string
+  grantTemplateUrl?: string; grantTemplateName?: string
+  created_at?: string
 }
 
 interface PlanCtx {
