@@ -2,7 +2,6 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { auth, db } from './firebase'
 import { onAuthStateChanged, User, signOut } from 'firebase/auth'
 import { doc, getDoc, setDoc, getDocs, collection, query, where } from 'firebase/firestore'
-import { findEmployeeByAuthEmail } from './employee-lookup'
 
 export interface Profile {
   uid: string; email: string; name: string; photo: string
@@ -25,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function loadProfile(u: User) {
     const normalizedEmail = (u.email || '').trim().toLowerCase()
+    console.debug('[auth] normalized login email:', normalizedEmail)
     const pendingInviteToken = typeof window !== 'undefined' ? sessionStorage.getItem('pendingInviteToken') : null
     const profileRef  = doc(db, 'users', u.uid)
     const profileSnap = await getDoc(profileRef)
@@ -81,27 +81,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(p); return
     }
 
-    // D. Check employees across companies by email mapping.
-    // Priority: work_email -> personal_email (with legacy fallbacks for existing data).
-    const matchedEmp = await findEmployeeByAuthEmail(db, normalizedEmail)
-    if (matchedEmp) {
+    // D. Authorization by users collection email lookup (legacy profile records by non-UID doc ids).
+    const userByEmailSnap = await getDocs(query(collection(db, 'users'), where('email', '==', normalizedEmail)))
+    console.debug('[auth] users query result:', { email: normalizedEmail, count: userByEmailSnap.size })
+    if (!userByEmailSnap.empty) {
+      const matchedUserData = userByEmailSnap.docs[0].data() as Partial<Profile>
       const p: Profile = {
-        uid: u.uid, email: normalizedEmail, name: u.displayName||normalizedEmail,
-        photo: u.photoURL||'', role: 'employee', isActive: true,
-        employeeId: matchedEmp.employeeId, companyId: matchedEmp.companyId,
+        uid: u.uid,
+        email: normalizedEmail,
+        name: matchedUserData.name || u.displayName || normalizedEmail,
+        photo: matchedUserData.photo || u.photoURL || '',
+        role: matchedUserData.role || 'employee',
+        isActive: matchedUserData.isActive !== false,
+        companyId: matchedUserData.companyId || '',
+        ...(matchedUserData.employeeId ? { employeeId: matchedUserData.employeeId } : {}),
       }
-      await setDoc(profileRef, { ...p, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString() })
-      setProfile(p); return
+      if (!p.companyId) {
+        setProfile(null)
+        setBlocked(true)
+        await signOut(auth)
+        return
+      }
+      await setDoc(profileRef, { ...matchedUserData, ...p, lastLoginAt: new Date().toISOString() }, { merge: true })
+      setProfile(p)
+      return
     }
 
-    // E. No match → new company signup → redirect to onboarding
-    // Create minimal profile, onboarding will complete it
-    const p: Profile = {
-      uid: u.uid, email: normalizedEmail, name: u.displayName||normalizedEmail,
-      photo: u.photoURL||'', role: 'companyAdmin', isActive: true, companyId: u.uid,
-    }
-    await setDoc(profileRef, { ...p, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString(), needsOnboarding: true })
-    setProfile(p)
+    // E. Not authorized (no users record for this email).
+    setProfile(null)
+    setBlocked(true)
+    await signOut(auth)
   }
 
   const refreshProfile = async () => {
