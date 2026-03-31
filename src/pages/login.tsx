@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
 import { auth, db } from '@/lib/firebase'
-import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
+import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, isSignInWithEmailLink } from 'firebase/auth'
 import Link from 'next/link'
 import { findEmployeeEmailByPersonalId } from '@/lib/personal-id-lookup'
 import { handleInviteLogin, storeEmailForInviteSignIn, storeInviteToken } from '@/lib/invite-login'
