@@ -163,6 +163,10 @@ export default function NewGrant() {
         <div className="card mb-4">
           <h2 className="section-title mb-4">Grant Details</h2>
           <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+            <div className="alert alert-info" style={{ marginBottom:0 }}>
+              <strong>Grant Terms Template:</strong>{' '}
+              {(companyData as any)?.grant_template_name || (companyData as any)?.grantTemplateName || 'No template configured (grant will still be created).'}
+            </div>
             <div>
               <label className="label">Employee *</label>
               <select className="input" value={form.employeeId} onChange={e=>onEmpChange(e.target.value)}>

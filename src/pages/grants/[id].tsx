@@ -115,8 +115,17 @@ export default function GrantDetail() {
 
   const isLocked = grant.locked === true
   const editable = !isLocked && canEdit(profile?.role)
-  const grantTemplateUrl = grant.grant_template_url || grant.grantTemplateUrl
-  const grantTemplateName = grant.grant_template_name || grant.grantTemplateName || 'Grant Terms.docx'
+  const grantTemplateUrl =
+    grant.grant_template_url ||
+    grant.grantTemplateUrl ||
+    (companyData as any)?.grant_template_url ||
+    (companyData as any)?.grantTemplateUrl
+  const grantTemplateName =
+    grant.grant_template_name ||
+    grant.grantTemplateName ||
+    (companyData as any)?.grant_template_name ||
+    (companyData as any)?.grantTemplateName ||
+    'Grant Terms.docx'
   const vestResult = computeVesting(vestEvents as any, grant.totalOptions, 0, exercises.reduce((s:number,x:any)=>s+x.sharesExercised,0), employee?.exitDate)
   const totalExercised = exercises.reduce((s:number,x:any)=>s+x.sharesExercised,0)
   const STATUSES = ['draft','issued','pending_acceptance','accepted','active','exercised','expired','cancelled']
