@@ -10,6 +10,20 @@ import { logAudit } from '@/lib/audit'
 import { canAdmin } from '@/lib/roles'
 import { uploadGrantTemplate } from '@/lib/grant-template'
 
+const DEFAULT_TERMS_TEMPLATE = `Terms and Conditions
+1. The offer is made to you personally and may be accepted only by you within 7 days of this offer.
+2. If the offer is accepted as above, options will be granted on 1st April, 2024 and vesting would occur as per the Vesting Schedule mentioned above.
+3. The offer may be accepted by you by completing this form and delivery of the same to the Company on or before 7 days from this letter (“Closing Date”).
+4. Any failure to return the acceptance form duly completed on or before the Closing Date shall, unless determined by the Board or the Management Committee of the Company, be deemed to be a rejection of the offer and any acceptance received after the Closing Date shall not be valid.
+5. On delivery of the acceptance form duly completed, you shall be deemed to have irrevocably waived any entitlement, by way of compensation for loss of office or otherwise howsoever, to any sum or other benefit to compensate you for loss of any rights under this ESOS.
+6. The exercise period for the Options granted (“Exercise Period”) shall be as defined in the ESOS.
+7. The acceptance of the Grant is entirely voluntary and the Company or the Board, does not guarantee any return on Shares.
+8. By accepting a Grant of Option, you shall be deemed to have expressly acknowledged that the Grant of Option does not constitute guarantee or continuity of employment and the Company shall reserve the right to terminate your employment in accordance with the terms of employment.
+9. You shall, before accepting a Grant of Option, obtain all necessary consents, if any, that may be required to enable you to accept the Grant of Option and the Company to allot and issue to you in accordance with the provisions of this ESOS, the Shares due to be allotted and issued upon the Exercise of your vested Options. By accepting a Grant of Option and/or submitting the Exercise form, are therefore deemed to have represented to the Company, that you have obtained all such consents.
+10. You shall not divulge the details of the ESOS and/or your holdings to any person except with the prior written permission of the Board, unless so required to do under any statutes or regulations applicable to you.
+Congratulations on receiving this offer, which comes to you in recognition of your continuous endeavour towards improving the business results of the Company. We are confident that you will continue to contribute to the activities of the Company with a sense of ownership and commitment. Your enthusiasm and the spirit to excel will have a positive impact on the performance and image of our Company.
+A copy of the ESOS specifying the terms and conditions applicable to the Options being granted are attached herewith.`
+
 export default function Settings() {
   const { user, profile, loading } = useAuth()
   const { companyId, companyData, refreshCompany } = usePlan()
@@ -19,6 +33,7 @@ export default function Settings() {
     contactEmail:'', contactPhone:'',
     signatoryName:'', signatoryTitle:'',
     grantExpiryDays:'30',
+    tandcTemplate: DEFAULT_TERMS_TEMPLATE,
   })
   const [saving, setSaving] = useState(false)
   const [ok, setOk] = useState('')
@@ -43,6 +58,7 @@ export default function Settings() {
           signatoryName:    d.signatoryName || '',
           signatoryTitle:   d.signatoryTitle || '',
           grantExpiryDays:  String(d.grantExpiryDays || 30),
+          tandcTemplate:    d.tandcTemplate || DEFAULT_TERMS_TEMPLATE,
         })
       }
     })
@@ -62,6 +78,7 @@ export default function Settings() {
       signatoryName:   form.signatoryName,
       signatoryTitle:  form.signatoryTitle,
       grantExpiryDays: parseInt(form.grantExpiryDays)||30,
+      tandcTemplate:   form.tandcTemplate || DEFAULT_TERMS_TEMPLATE,
       updatedAt:       new Date().toISOString(),
     }, { merge: true })
     await logAudit({ companyId, userId:user!.uid, userEmail:profile?.email||'', entityType:'company', entityId:companyId, entityLabel:'Company settings', action:'company_updated' })
@@ -195,10 +212,16 @@ export default function Settings() {
 
         <div className="card mb-5">
           <h2 className="section-title mb-4">ESOP Settings</h2>
-          <div>
+          <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
             <label className="label">Grant acceptance window (days)</label>
             <input className="input" type="number" min="7" max="90" style={{maxWidth:140}} value={form.grantExpiryDays} onChange={e=>set('grantExpiryDays',e.target.value)}/>
             <p style={{fontSize:11,color:'var(--muted)',marginTop:6}}>Grants not accepted within this period will automatically expire.</p>
+
+            <div>
+              <label className="label">Terms of Grant (printed as Annexure A in Grant Letter)</label>
+              <textarea className="input" rows={14} value={form.tandcTemplate} onChange={e=>set('tandcTemplate',e.target.value)} />
+              <p style={{fontSize:11,color:'var(--muted)',marginTop:6}}>Admins can edit this standard template. It will be appended at the end of every generated grant letter as Annexure A.</p>
+            </div>
           </div>
         </div>
 
