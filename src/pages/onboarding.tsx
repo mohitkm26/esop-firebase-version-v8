@@ -5,6 +5,7 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { useAuth } from '@/lib/auth-context'
 import { usePlan } from '@/lib/plan-context'
+import { uploadGrantTemplate } from '@/lib/grant-template'
 
 export default function Onboarding() {
   const { user, profile, loading } = useAuth()
@@ -13,7 +14,9 @@ export default function Onboarding() {
   const [step, setStep] = useState(1)
   const [saving, setSaving] = useState(false)
   const [logoFile, setLogoFile] = useState<File|null>(null)
+  const [grantTemplateFile, setGrantTemplateFile] = useState<File|null>(null)
   const [logoPreview, setLogoPreview] = useState('')
+  const [templateMsg, setTemplateMsg] = useState('')
   const [form, setForm] = useState({
     companyName:'', contactEmail:'', address:'',
     plan:'basic', currency:'INR',
@@ -28,26 +31,46 @@ export default function Onboarding() {
     if (f) { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)) }
   }
 
+  function handleGrantTemplateChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    setTemplateMsg('')
+    setGrantTemplateFile(f)
+  }
+
   async function finish() {
     if (!form.companyName || !user || !profile) return
     setSaving(true)
     try {
       const companyId = profile.companyId || user.uid
       let logoUrl = ''
+      let grantTemplateUrl = ''
+      let grantTemplateName = ''
       if (logoFile) {
         const logoRef = ref(storage, `companies/${companyId}/logo`)
         await uploadBytes(logoRef, logoFile)
         logoUrl = await getDownloadURL(logoRef)
       }
+      if (grantTemplateFile) {
+        grantTemplateUrl = await uploadGrantTemplate(grantTemplateFile, companyId)
+        grantTemplateName = grantTemplateFile.name
+        setTemplateMsg('Grant template uploaded successfully')
+      }
       await setDoc(doc(db,'companies',companyId), {
+        id: companyId,
+        name: form.companyName,
         companyId, companyName: form.companyName, contactEmail: form.contactEmail||user.email,
         address: form.address, plan: form.plan, logoUrl, currency: form.currency,
         vestingCliff: parseInt(form.vestingCliff)||12,
         vestingPeriod: parseInt(form.vestingPeriod)||48,
         grantExpiryDays: parseInt(form.grantExpiryDays)||30,
         exerciseWindowDays: parseInt(form.exerciseWindowDays)||90,
+        grant_template_url: grantTemplateUrl || null,
+        grant_template_name: grantTemplateName || null,
+        grantTemplateUrl: grantTemplateUrl || null,
+        grantTemplateName: grantTemplateName || null,
         signatoryName: form.signatoryName, signatoryTitle: form.signatoryTitle,
-        onboarded: true, createdAt: serverTimestamp(),
+        onboarded: true, createdAt: serverTimestamp(), created_at: serverTimestamp(),
       }, { merge: true })
       await refreshCompany()
       router.replace('/dashboard')
@@ -98,6 +121,18 @@ export default function Onboarding() {
                       <input type="file" accept="image/*" style={{ display:'none' }} onChange={handleLogoChange}/>
                     </label>
                   </div>
+                </div>
+                <div>
+                  <label className="label">Upload Standard Grant Terms (DOCX)</label>
+                  <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                    <label className="btn btn-secondary btn-sm" style={{ cursor:'pointer' }}>
+                      {grantTemplateFile ? 'Replace file' : 'Upload DOCX'}
+                      <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style={{ display:'none' }} onChange={handleGrantTemplateChange}/>
+                    </label>
+                    <span style={{ fontSize:12, color:'var(--text2)' }}>{grantTemplateFile?.name || 'No file selected (optional)'}</span>
+                  </div>
+                  <div style={{ fontSize:11, color:'var(--text3)', marginTop:4 }}>Max size: 5MB</div>
+                  {templateMsg && <div style={{ fontSize:12, color:'var(--success)', marginTop:6 }}>✅ {templateMsg}</div>}
                 </div>
               </div>
               <button disabled={!form.companyName} onClick={()=>setStep(2)} className="btn btn-primary" style={{ marginTop:24, width:'100%', justifyContent:'center' }}>Next →</button>

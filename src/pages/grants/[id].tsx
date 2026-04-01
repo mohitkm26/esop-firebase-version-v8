@@ -115,6 +115,17 @@ export default function GrantDetail() {
 
   const isLocked = grant.locked === true
   const editable = !isLocked && canEdit(profile?.role)
+  const grantTemplateUrl =
+    grant.grant_template_url ||
+    grant.grantTemplateUrl ||
+    (companyData as any)?.grant_template_url ||
+    (companyData as any)?.grantTemplateUrl
+  const grantTemplateName =
+    grant.grant_template_name ||
+    grant.grantTemplateName ||
+    (companyData as any)?.grant_template_name ||
+    (companyData as any)?.grantTemplateName ||
+    'Grant Terms.docx'
   const vestResult = computeVesting(vestEvents as any, grant.totalOptions, 0, exercises.reduce((s:number,x:any)=>s+x.sharesExercised,0), employee?.exitDate)
   const totalExercised = exercises.reduce((s:number,x:any)=>s+x.sharesExercised,0)
   const STATUSES = ['draft','issued','pending_acceptance','accepted','active','exercised','expired','cancelled']
@@ -161,11 +172,19 @@ export default function GrantDetail() {
               ['Grant Type', grant.grantType], ['Exercise Price', fmtC(grant.exercisePrice)],
               ['Grant Date', fmtDate(grant.grantDate)], ['Vesting Start', fmtDate(grant.vestingStartDate)],
               ['Expires At', fmtDate(grant.expiresAt)], ['Locked', isLocked?'Yes':'No'],
+              ['Grant Terms Template', grantTemplateUrl ? grantTemplateName : 'Not attached'],
               ['Notes', grant.notes||'—'],
             ].map(([k,v])=>(
               <div key={k}><div className="text-xs text-muted" style={{ marginBottom:2 }}>{k}</div><div style={{ fontWeight:600, fontSize:13 }}>{v}</div></div>
             ))}
           </div>
+          {grantTemplateUrl && (
+            <div style={{ marginTop:14 }}>
+              <a href={grantTemplateUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
+                ⬇️ Download Grant Terms
+              </a>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -279,7 +298,14 @@ export default function GrantDetail() {
         {tab === 'letter' && (
           <div className="card">
             <p style={{ fontSize:13, color:'var(--text2)', marginBottom:16 }}>The grant letter will open in a new window for printing or PDF export.</p>
-            <button onClick={viewLetter} className="btn btn-primary">📄 Open Grant Letter</button>
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+              <button onClick={viewLetter} className="btn btn-primary">📄 Open Grant Letter</button>
+              {grantTemplateUrl && (
+                <a href={grantTemplateUrl} target="_blank" rel="noreferrer" className="btn btn-secondary">
+                  ⬇️ Download Grant Terms
+                </a>
+              )}
+            </div>
           </div>
         )}
       </div>
