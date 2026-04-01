@@ -174,6 +174,12 @@ export function buildGrantLetterHTML(params: {
   },{html:'',cum:0}).html
 
   const defaultTC = `This grant is subject to: (a) the Company's ESOP Plan; (b) your employment agreement; (c) applicable laws including the Companies Act 2013 and Income Tax Act 1961. Options lapse if not exercised within the exercise window following cessation of employment.`
+  const escapeHtml = (value: string) =>
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+  const tandcFormatted = escapeHtml(tandc || defaultTC).replace(/\n/g, '<br/>')
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
@@ -190,6 +196,7 @@ export function buildGrantLetterHTML(params: {
   .sig{margin-top:60px}
   .sig-box{display:inline-block;min-width:200px;border-top:1px solid #333;padding-top:8px;margin-top:60px}
   .accept{margin-top:50px;padding:20px;border:1px dashed #999;border-radius:8px;background:#fafaf8}
+  .annexure{margin-top:46px;border-top:2px solid #c8922a;padding-top:16px}
   @media print { body{margin:20px} }
 </style></head><body>
 ${letterheadUrl ? `<img src="${letterheadUrl}" class="letterhead" alt="letterhead"/>` : ''}
@@ -216,7 +223,6 @@ ${letterheadUrl ? `<img src="${letterheadUrl}" class="letterhead" alt="letterhea
 <table><thead><tr><th>Vesting Date</th><th style="text-align:right">Options</th><th style="text-align:right">Cumulative</th></tr></thead>
 <tbody>${rows}</tbody></table>
 ${notes ? `<div class="note"><strong>Notes:</strong> ${notes}</div>` : ''}
-<div class="note" style="margin-top:24px"><strong>Terms & Conditions</strong><br/>${tandc || defaultTC}</div>
 <div class="sig">
   <p>For and on behalf of <strong>${companyName}</strong></p>
   <div class="sig-box">
@@ -232,6 +238,10 @@ ${notes ? `<div class="note"><strong>Notes:</strong> ${notes}</div>` : ''}
     <td style="width:50%"><div style="border-top:1px solid #333;padding-top:6px;margin-top:40px">Employee Signature</div></td>
     <td style="width:50%;text-align:right"><div style="border-top:1px solid #333;padding-top:6px;margin-top:40px">Date</div></td>
   </tr></table>
+</div>
+<div class="annexure">
+  <h3 style="margin:0 0 10px;color:#c8922a">Annexure A — Terms and Conditions</h3>
+  <div style="white-space:normal">${tandcFormatted}</div>
 </div>
 </body></html>`
 }

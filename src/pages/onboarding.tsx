@@ -40,6 +40,8 @@ export default function Onboarding() {
         logoUrl = await getDownloadURL(logoRef)
       }
       await setDoc(doc(db,'companies',companyId), {
+        id: companyId,
+        name: form.companyName,
         companyId, companyName: form.companyName, contactEmail: form.contactEmail||user.email,
         address: form.address, plan: form.plan, logoUrl, currency: form.currency,
         vestingCliff: parseInt(form.vestingCliff)||12,
@@ -47,7 +49,7 @@ export default function Onboarding() {
         grantExpiryDays: parseInt(form.grantExpiryDays)||30,
         exerciseWindowDays: parseInt(form.exerciseWindowDays)||90,
         signatoryName: form.signatoryName, signatoryTitle: form.signatoryTitle,
-        onboarded: true, createdAt: serverTimestamp(),
+        onboarded: true, createdAt: serverTimestamp(), created_at: serverTimestamp(),
       }, { merge: true })
       await refreshCompany()
       router.replace('/dashboard')
