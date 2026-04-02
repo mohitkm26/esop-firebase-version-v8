@@ -10,10 +10,18 @@ export interface Profile {
 
 interface AuthCtx {
   user: User|null; profile: Profile|null; loading: boolean; blocked: boolean
+  effectiveRole: string
+  employeeView: boolean
+  canSwitchProfiles: boolean
+  switchProfileView: (view: 'admin'|'employee') => void
   refreshProfile: () => Promise<void>
 }
 
-const Ctx = createContext<AuthCtx>({ user:null, profile:null, loading:true, blocked:false, refreshProfile: async()=>{} })
+const Ctx = createContext<AuthCtx>({
+  user:null, profile:null, loading:true, blocked:false,
+  effectiveRole:'', employeeView:false, canSwitchProfiles:false,
+  switchProfileView: ()=>{}, refreshProfile: async()=>{}
+})
 export const useAuth = () => useContext(Ctx)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -21,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile|null>(null)
   const [loading, setLoading] = useState(true)
   const [blocked, setBlocked] = useState(false)
+  const [employeeView, setEmployeeView] = useState(false)
 
   async function loadProfile(u: User) {
     const normalizedEmail = (u.email || '').trim().toLowerCase()
@@ -120,6 +129,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('profile_view_mode') : null
+    setEmployeeView(stored === 'employee')
+  }, [])
+
+  useEffect(() => {
+    if (!profile?.employeeId && employeeView) {
+      setEmployeeView(false)
+      if (typeof window !== 'undefined') localStorage.setItem('profile_view_mode', 'admin')
+    }
+  }, [profile?.employeeId, employeeView])
+
+  const canSwitchProfiles = Boolean(profile?.employeeId && profile?.role && profile.role !== 'employee')
+  const effectiveRole = employeeView && profile?.employeeId ? 'employee' : (profile?.role || '')
+
+  function switchProfileView(view: 'admin'|'employee') {
+    const nextEmployeeView = view === 'employee'
+    if (nextEmployeeView && !profile?.employeeId) return
+    setEmployeeView(nextEmployeeView)
+    if (typeof window !== 'undefined') localStorage.setItem('profile_view_mode', nextEmployeeView ? 'employee' : 'admin')
+  }
+
+  useEffect(() => {
     return onAuthStateChanged(auth, async u => {
       setUser(u); setBlocked(false)
       if (!u) { setProfile(null); setLoading(false); return }
@@ -128,5 +159,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  return <Ctx.Provider value={{ user, profile, loading, blocked, refreshProfile }}>{children}</Ctx.Provider>
+  return (
+    <Ctx.Provider value={{
+      user, profile, loading, blocked, refreshProfile,
+      effectiveRole, employeeView, canSwitchProfiles, switchProfileView,
+    }}>
+      {children}
+    </Ctx.Provider>
+  )
 }
