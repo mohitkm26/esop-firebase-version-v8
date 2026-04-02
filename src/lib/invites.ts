@@ -1,4 +1,4 @@
-import { addDoc, collection } from 'firebase/firestore'
+import { addDoc, collection, getDocs, limit, query, where } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 import { sendEmail } from '@/lib/email'
 import { storeEmailForInviteSignIn } from '@/lib/invite-login'
@@ -53,15 +53,13 @@ export function generateInvitePassword(length = 14) {
   const lower = 'abcdefghjkmnpqrstuvwxyz'
   const upper = 'ABCDEFGHJKMNPQRSTUVWXYZ'
   const numbers = '23456789'
-  const symbols = '@#$%&*!?'
-  const all = `${lower}${upper}${numbers}${symbols}`
+  const all = `${lower}${upper}${numbers}`
 
   const required = [
     pickRandom(lower, 1),
     pickRandom(upper, 1),
     pickRandom(numbers, 1),
-    pickRandom(symbols, 1),
-    pickRandom(all, Math.max(0, length - 4)),
+    pickRandom(all, Math.max(0, length - 3)),
   ].join('')
 
   return required
@@ -79,12 +77,28 @@ export function buildInviteLink(token: string, email: string) {
 export async function createInviteRecord(db: Firestore, input: CreateInviteInput) {
   const createdAt = new Date().toISOString()
   const token = generateInviteToken()
-  const tempPassword = generateInvitePassword()
+  const normalizedEmail = input.email.toLowerCase()
+
+  const existingInvitesSnap = await getDocs(
+    query(
+      collection(db, 'invites'),
+      where('companyId', '==', input.companyId),
+      where('email', '==', normalizedEmail),
+      limit(25),
+    ),
+  )
+
+  const previousInviteWithPassword = existingInvitesSnap.docs
+    .map(docSnap => docSnap.data() as { createdAt?: string; tempPassword?: string })
+    .filter(invite => typeof invite.tempPassword === 'string' && invite.tempPassword.trim())
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0]
+
+  const tempPassword = previousInviteWithPassword?.tempPassword || generateInvitePassword()
   const inviteLink = buildInviteLink(token, input.email)
 
   const inviteData: Record<string, unknown> = {
     companyId: input.companyId,
-    email: input.email.toLowerCase(),
+    email: normalizedEmail,
     role: input.role,
     inviteKind: input.inviteKind,
     invitedBy: input.invitedBy,
