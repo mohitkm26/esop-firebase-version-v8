@@ -164,6 +164,64 @@ export default function UsersPage() {
     }
   }
 
+
+  async function updateInvite(inviteId: string, updates: { email: string; role: Role }) {
+    if (!companyId || !user) return
+    setSavingUserId(inviteId); setErr(''); setMsg('')
+    try {
+      const normalizedEmail = updates.email.trim().toLowerCase()
+      if (!normalizedEmail) throw new Error('Email is required')
+
+      await updateDoc(doc(db, 'invites', inviteId), {
+        email: normalizedEmail,
+        role: updates.role,
+        updatedAt: new Date().toISOString(),
+      })
+
+      await logAudit({
+        companyId,
+        userId: user.uid,
+        userEmail: profile?.email || '',
+        entityType: 'invite',
+        entityId: inviteId,
+        action: 'employee_updated',
+        after: { email: normalizedEmail, role: updates.role },
+      })
+
+      setInvites(prev => prev.map(inv => inv.id === inviteId ? { ...inv, email: normalizedEmail, role: updates.role } : inv))
+      setMsg('Pending invite updated successfully.')
+    } catch (e: any) {
+      setErr(e.message || 'Failed to update invite')
+    } finally {
+      setSavingUserId('')
+    }
+  }
+
+  async function removeInvite(inviteId: string) {
+    const targetInvite = invites.find(inv => inv.id === inviteId)
+    if (!targetInvite || !companyId || !user) return
+    if (!confirm(`Delete pending invite for ${targetInvite.email || 'this user'}? This cannot be undone.`)) return
+    setSavingUserId(inviteId); setErr(''); setMsg('')
+    try {
+      await deleteDoc(doc(db, 'invites', inviteId))
+      await logAudit({
+        companyId,
+        userId: user.uid,
+        userEmail: profile?.email || '',
+        entityType: 'invite',
+        entityId: inviteId,
+        action: 'user_removed',
+        after: { email: targetInvite.email || '', role: targetInvite.role || '' },
+      })
+      setInvites(prev => prev.filter(inv => inv.id !== inviteId))
+      setMsg('Pending invite deleted successfully.')
+    } catch (e: any) {
+      setErr(e.message || 'Failed to delete invite')
+    } finally {
+      setSavingUserId('')
+    }
+  }
+
   async function changeRole(uid: string, newRole: Role) {
     const target = users.find(u => u.id === uid)
     if (!target || !companyId || !user) return
@@ -277,10 +335,32 @@ export default function UsersPage() {
             <h2 className="section-title mb-4">Pending Invites</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {invites.map((inv: any) => (
-                <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: 'var(--surface2)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                  <span style={{ flex: 1, fontSize: 13 }}>{inv.email}</span>
+                <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: 'var(--surface2)', borderRadius: 8, border: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                  <span style={{ flex: 1, minWidth: 220, fontSize: 13 }}>{inv.email}</span>
                   <span className={`badge ${(ROLE_COLORS as any)[inv.role] || 'badge-muted'}`}>{(ROLE_LABELS as any)[inv.role] || inv.role}</span>
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}>Pending</span>
+                  <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                    <button
+                      disabled={savingUserId === inv.id}
+                      onClick={() => {
+                        const nextEmail = prompt('Update invite email', inv.email || '')
+                        if (nextEmail == null) return
+                        const nextRole = prompt('Update invite role (companyAdmin, hrAdmin, editor, employee)', inv.role || 'employee')
+                        if (nextRole == null) return
+                        if (!ASSIGNABLE_ROLES.includes(nextRole as Role)) {
+                          setErr('Invalid role selected for pending invite.')
+                          return
+                        }
+                        updateInvite(inv.id, { email: nextEmail, role: nextRole as Role })
+                      }}
+                      className="btn btn-sm btn-ghost"
+                    >
+                      Edit
+                    </button>
+                    <button disabled={savingUserId === inv.id} onClick={() => removeInvite(inv.id)} className="btn btn-sm btn-danger">
+                      Delete
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
