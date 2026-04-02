@@ -1,4 +1,4 @@
-import { Auth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'
+import { Auth, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth'
 import { Firestore, collection, getDocs, limit, query, where } from 'firebase/firestore'
 
 const EMAIL_FOR_SIGN_IN_KEY = 'emailForSignIn'
@@ -33,6 +33,7 @@ export function storeInviteToken(token?: string | null) {
 export function clearInviteLoginStorage() {
   if (typeof window === 'undefined') return
   window.localStorage.removeItem(EMAIL_FOR_SIGN_IN_KEY)
+  window.localStorage.removeItem(INVITE_TOKEN_KEY)
 }
 
 export async function validateInviteToken(db: Firestore, token?: string | null, email?: string | null) {
@@ -111,7 +112,16 @@ export async function handleInviteLogin(input: HandleInviteLoginInput) {
       console.info('[invite-login] Invite user created', { inviteEmail })
     } catch (createError: any) {
       if (createError?.code === 'auth/email-already-in-use') {
-        throw new Error('Account exists but could not be auto-logged in. Please sign in manually.')
+        try {
+          await sendPasswordResetEmail(input.auth, inviteEmail)
+          throw new Error('Account already exists with a different password. We sent a password reset email. Please reset password and sign in.')
+        } catch (resetError: any) {
+          console.error('[invite-login] Could not send password reset email', {
+            inviteEmail,
+            code: resetError?.code || 'unknown',
+          })
+          throw new Error('Account already exists with a different password. Please use "Forgot password" to reset and sign in.')
+        }
       }
       throw createError
     }
