@@ -11,12 +11,28 @@ function getBaseUrl(req: NextApiRequest) {
   return `${protocol}://${host}`
 }
 
-function inviteTemplate({ employeeName, loginLink, role }: { employeeName: string; loginLink: string; role: string }) {
+function inviteTemplate({
+  employeeName,
+  loginLink,
+  role,
+  loginEmail,
+  tempPassword,
+}: {
+  employeeName: string
+  loginLink: string
+  role: string
+  loginEmail: string
+  tempPassword: string
+}) {
   const text = [
     `Hi ${employeeName},`,
     '',
     `You've been invited to join ESOP Manager as ${role}.`,
+    `Login ID: ${loginEmail}`,
+    `Temporary password: ${tempPassword}`,
     `Login link: ${loginLink}`,
+    '',
+    'Please change your password after your first login.',
     '',
     'If you were not expecting this invite, you can ignore this email.',
   ].join('\n')
@@ -26,11 +42,16 @@ function inviteTemplate({ employeeName, loginLink, role }: { employeeName: strin
       <p>Hi <strong>${employeeName}</strong>,</p>
       <p>You've been invited to join ESOP Manager as <strong>${role}</strong>.</p>
       <p>
+        <strong>Login ID:</strong> ${loginEmail}<br/>
+        <strong>Temporary password:</strong> ${tempPassword}
+      </p>
+      <p>
         <a href="${loginLink}" style="display:inline-block;padding:10px 14px;background:#111827;color:white;text-decoration:none;border-radius:6px;">
           Login to ESOP Manager
         </a>
       </p>
       <p>If the button does not work, use this link: <a href="${loginLink}">${loginLink}</a></p>
+      <p>Please change your password after your first login.</p>
       <p style="color:#6b7280;font-size:12px;">If you were not expecting this invite, you can ignore this email.</p>
     </div>
   `
@@ -123,13 +144,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let payload: { subject: string; text: string; html: string }
 
     if (body.type === 'invite') {
-      if (!body.loginLink) {
-        return res.status(400).json({ error: 'Missing login link for invite email' })
+      if (!body.loginLink || !body.tempPassword || !body.to) {
+        return res.status(400).json({ error: 'Missing login credentials for invite email' })
       }
       payload = inviteTemplate({
         employeeName: body.employeeName,
         loginLink: body.loginLink,
         role: body.role || 'employee',
+        loginEmail: body.to,
+        tempPassword: body.tempPassword,
       })
     } else if (body.type === 'grant-letter') {
       if (!body.grant) {

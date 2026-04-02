@@ -18,6 +18,7 @@ export interface InviteEmailPayload {
   email: string
   role: string
   inviteLink: string
+  tempPassword: string
   inviteKind: InviteKind
   companyId: string
   employeeName: string
@@ -40,6 +41,35 @@ export function generateInviteToken() {
   return `${Date.now().toString(36)}-${randomHex(20)}`
 }
 
+function pickRandom(chars: string, length: number) {
+  const arr = new Uint8Array(length)
+  const cryptoApi = globalThis.crypto
+  if (cryptoApi?.getRandomValues) cryptoApi.getRandomValues(arr)
+  else for (let i = 0; i < length; i += 1) arr[i] = Math.floor(Math.random() * 256)
+  return Array.from(arr, value => chars[value % chars.length]).join('')
+}
+
+export function generateInvitePassword(length = 14) {
+  const lower = 'abcdefghjkmnpqrstuvwxyz'
+  const upper = 'ABCDEFGHJKMNPQRSTUVWXYZ'
+  const numbers = '23456789'
+  const symbols = '@#$%&*!?'
+  const all = `${lower}${upper}${numbers}${symbols}`
+
+  const required = [
+    pickRandom(lower, 1),
+    pickRandom(upper, 1),
+    pickRandom(numbers, 1),
+    pickRandom(symbols, 1),
+    pickRandom(all, Math.max(0, length - 4)),
+  ].join('')
+
+  return required
+    .split('')
+    .sort(() => Math.random() - 0.5)
+    .join('')
+}
+
 export function buildInviteLink(token: string, email: string) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '')
   const params = new URLSearchParams({ invite: token, email: email.toLowerCase() })
@@ -49,6 +79,7 @@ export function buildInviteLink(token: string, email: string) {
 export async function createInviteRecord(db: Firestore, input: CreateInviteInput) {
   const createdAt = new Date().toISOString()
   const token = generateInviteToken()
+  const tempPassword = generateInvitePassword()
   const inviteLink = buildInviteLink(token, input.email)
 
   const inviteData: Record<string, unknown> = {
@@ -58,6 +89,7 @@ export async function createInviteRecord(db: Firestore, input: CreateInviteInput
     inviteKind: input.inviteKind,
     invitedBy: input.invitedBy,
     token,
+    tempPassword,
     inviteLink,
     status: 'pending',
     used: false,
@@ -72,7 +104,7 @@ export async function createInviteRecord(db: Firestore, input: CreateInviteInput
   if (input.employeeId) inviteData.employeeId = input.employeeId
 
   const inviteRef = await addDoc(collection(db, 'invites'), inviteData)
-  return { id: inviteRef.id, token, inviteLink, createdAt }
+  return { id: inviteRef.id, token, tempPassword, inviteLink, createdAt }
 }
 
 export async function sendInviteEmail(payload: InviteEmailPayload) {
@@ -85,6 +117,7 @@ export async function sendInviteEmail(payload: InviteEmailPayload) {
     inviteKind: payload.inviteKind,
     employeeName: payload.employeeName,
     loginLink: payload.inviteLink,
+    tempPassword: payload.tempPassword,
     companyId: payload.companyId,
   })
 

@@ -52,6 +52,20 @@ export async function validateInviteToken(db: Firestore, token?: string | null, 
   return !inviteSnap.empty
 }
 
+async function getInviteTempPassword(db: Firestore, token: string, email: string) {
+  const inviteQuery = query(
+    collection(db, 'invites'),
+    where('token', '==', token),
+    where('email', '==', email),
+    where('status', 'in', ['pending', 'accepted']),
+    limit(1),
+  )
+  const inviteSnap = await getDocs(inviteQuery)
+  if (inviteSnap.empty) return null
+  const inviteData = inviteSnap.docs[0].data() as { tempPassword?: string }
+  return inviteData.tempPassword || null
+}
+
 interface HandleInviteLoginInput {
   auth: Auth
   db: Firestore
@@ -63,7 +77,7 @@ interface HandleInviteLoginInput {
 export async function handleInviteLogin(input: HandleInviteLoginInput) {
   const inviteEmail = getEmailForInviteSignIn(input.email)
   const inviteToken = (input.inviteToken || '').trim()
-  const tempPassword = input.tempPassword || 'Temp@123456'
+  let tempPassword = input.tempPassword || ''
 
   if (!inviteEmail) {
     throw new Error('Invite email is missing. Please use manual sign in.')
@@ -74,6 +88,13 @@ export async function handleInviteLogin(input: HandleInviteLoginInput) {
     if (!validInvite) {
       throw new Error('Invite token is invalid or expired. Please request a new invite.')
     }
+    if (!tempPassword) {
+      tempPassword = (await getInviteTempPassword(input.db, inviteToken, inviteEmail)) || ''
+    }
+  }
+
+  if (!tempPassword) {
+    throw new Error('Invite credentials are missing. Please request a fresh invite from your admin.')
   }
 
   try {

@@ -125,6 +125,7 @@ export default function UsersPage() {
         email: inviteEmail.toLowerCase(),
         role: inviteRole,
         inviteLink: invite.inviteLink,
+        tempPassword: invite.tempPassword,
         inviteKind: 'user',
         companyId,
         employeeName: inviteEmail.split('@')[0] || 'there',
@@ -155,7 +156,7 @@ export default function UsersPage() {
         createdAt: invite.createdAt,
         inviteLink: invite.inviteLink,
       }])
-      setMsg(`Invite generated for ${inviteEmail}. Link: ${invite.inviteLink}`)
+      setMsg(`Invite generated for ${inviteEmail}. Login ID: ${inviteEmail.toLowerCase()} | Temporary password: ${invite.tempPassword} | Link: ${invite.inviteLink}`)
       setInviteEmail('')
     } catch (e: any) {
       setErr(e.message || 'Failed to create invite')
