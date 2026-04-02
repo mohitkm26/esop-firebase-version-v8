@@ -53,15 +53,13 @@ export function generateInvitePassword(length = 14) {
   const lower = 'abcdefghjkmnpqrstuvwxyz'
   const upper = 'ABCDEFGHJKMNPQRSTUVWXYZ'
   const numbers = '23456789'
-  const symbols = '@#$%&*!?'
-  const all = `${lower}${upper}${numbers}${symbols}`
+  const all = `${lower}${upper}${numbers}`
 
   const required = [
     pickRandom(lower, 1),
     pickRandom(upper, 1),
     pickRandom(numbers, 1),
-    pickRandom(symbols, 1),
-    pickRandom(all, Math.max(0, length - 4)),
+    pickRandom(all, Math.max(0, length - 3)),
   ].join('')
 
   return required
