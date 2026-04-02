@@ -37,7 +37,7 @@ const SUPER_NAV = [
 interface Props { children: ReactNode; title?: string }
 
 export default function Layout({ children, title }: Props) {
-  const { profile } = useAuth()
+  const { profile, effectiveRole, canSwitchProfiles, employeeView, switchProfileView } = useAuth()
   const { plan, companyData } = usePlan()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -56,7 +56,7 @@ export default function Layout({ children, title }: Props) {
     localStorage.setItem('theme', next)
   }
 
-  const role = profile?.role || ''
+  const role = effectiveRole || profile?.role || ''
   const planColor = PLAN_COLORS[plan]
 
   const isGated = (gate?: 'pro'|'advanced') => gate ? isPlanGated(plan, gate) : false
@@ -158,7 +158,9 @@ export default function Layout({ children, title }: Props) {
           }
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ fontSize:12, fontWeight:600, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{profile?.name}</div>
-            <div style={{ fontSize:9, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'0.06em' }}>{profile?.role}</div>
+            <div style={{ fontSize:9, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'0.06em' }}>
+              {role}{employeeView ? ' view' : ''}
+            </div>
           </div>
           <div style={{ display:'flex', gap:4 }}>
             <button onClick={toggleTheme} style={{ background:'none', border:'none', color:'var(--text3)', cursor:'pointer', fontSize:14, padding:'2px 4px' }} title="Toggle theme">
@@ -171,6 +173,24 @@ export default function Layout({ children, title }: Props) {
           <Link href="/pricing" style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:5, padding:'7px 12px', borderRadius:8, fontSize:11.5, fontWeight:700, background:'rgba(200,146,42,0.1)', border:'1px solid rgba(200,146,42,0.2)', color:'var(--accent)', textDecoration:'none', marginTop:6 }}>
             ◆ Upgrade Plan
           </Link>
+        )}
+        {canSwitchProfiles && (
+          <div style={{ display:'flex', gap:6, marginTop:6, padding:'0 2px' }}>
+            <button
+              className={`btn btn-xs ${!employeeView ? 'btn-secondary' : 'btn-ghost'}`}
+              onClick={() => switchProfileView('admin')}
+              style={{ flex:1, padding:'6px 8px' }}
+            >
+              Admin View
+            </button>
+            <button
+              className={`btn btn-xs ${employeeView ? 'btn-secondary' : 'btn-ghost'}`}
+              onClick={() => switchProfileView('employee')}
+              style={{ flex:1, padding:'6px 8px' }}
+            >
+              Employee View
+            </button>
+          </div>
         )}
       </div>
     </aside>
