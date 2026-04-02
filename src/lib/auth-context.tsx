@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { auth, db } from './firebase'
 import { onAuthStateChanged, User, signOut } from 'firebase/auth'
 import { doc, getDoc, setDoc, getDocs, collection, query, where } from 'firebase/firestore'
+import { findEmployeeByAuthEmail } from './employee-lookup'
 
 export interface Profile {
   uid: string; email: string; name: string; photo: string
@@ -37,12 +38,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const pendingInviteToken = typeof window !== 'undefined' ? sessionStorage.getItem('pendingInviteToken') : null
     const profileRef  = doc(db, 'users', u.uid)
     const profileSnap = await getDoc(profileRef)
+    const resolveEmployeeLink = async (companyId?: string) => {
+      if (!companyId) return null
+      const employeeLink = await findEmployeeByAuthEmail(db, normalizedEmail)
+      if (!employeeLink) return null
+      if (employeeLink.companyId !== companyId) return null
+      return employeeLink.employeeId
+    }
 
     // A. Returning user
     if (profileSnap.exists()) {
       const existing = profileSnap.data() as Profile
       if (existing.isActive === false) {
         await signOut(auth); setUser(null); setProfile(null); setBlocked(true); return
+      }
+      if (existing.role === 'employee' && !existing.employeeId) {
+        const employeeId = await resolveEmployeeLink(existing.companyId)
+        if (employeeId) {
+          const updated = { ...existing, employeeId }
+          await setDoc(profileRef, { employeeId, updatedAt: new Date().toISOString() }, { merge: true })
+          setProfile(updated)
+          return
+        }
       }
       setProfile(existing); return
     }
@@ -72,11 +89,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!inviteSnap.empty) {
       const inviteDoc = inviteSnap.docs[0]
       const invite = inviteDoc.data()
+      const employeeId = invite.employeeId || (await resolveEmployeeLink(invite.companyId))
       const p: Profile = {
         uid: u.uid, email: normalizedEmail, name: u.displayName||normalizedEmail,
         photo: u.photoURL||'', role: invite.role||'employee', isActive: true,
         companyId: invite.companyId,
-        ...(invite.employeeId ? { employeeId: invite.employeeId } : {}),
+        ...(employeeId ? { employeeId } : {}),
       }
       await setDoc(profileRef, { ...p, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString() })
       await setDoc(inviteDoc.ref, {
@@ -104,6 +122,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isActive: matchedUserData.isActive !== false,
         companyId: matchedUserData.companyId || '',
         ...(matchedUserData.employeeId ? { employeeId: matchedUserData.employeeId } : {}),
+      }
+      if (!p.employeeId && p.role === 'employee') {
+        const employeeId = await resolveEmployeeLink(p.companyId)
+        if (employeeId) p.employeeId = employeeId
       }
       if (!p.companyId) {
         setProfile(null)

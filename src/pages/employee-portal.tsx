@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth-context'
 import { fmtN, fmtC, fmtDate, getLatestValuation, computeVesting, computeVestingStatus } from '@/lib/utils'
 import Head from 'next/head'
 import { logAudit } from '@/lib/audit'
+import { findEmployeeByAuthEmail } from '@/lib/employee-lookup'
 
 const EMPLOYEE_LINK_ERROR = 'Your sign-in email is not linked to any employee record (work_email or personal_email). Please contact HR to update your details.'
 
@@ -34,8 +35,25 @@ export default function EmployeePortal() {
     if (canEdit(effectiveRole)) {
       router.replace('/dashboard'); return
     }
-    if (effectiveRole === 'employee' && profile.employeeId) loadData(profile.employeeId)
-    else setErr(EMPLOYEE_LINK_ERROR)
+    if (effectiveRole === 'employee' && profile.employeeId) {
+      loadData(profile.employeeId)
+      return
+    }
+
+    if (effectiveRole === 'employee') {
+      findEmployeeByAuthEmail(db, profile.email)
+        .then(linkedEmployee => {
+          if (linkedEmployee && linkedEmployee.companyId === profile.companyId) {
+            loadData(linkedEmployee.employeeId)
+          } else {
+            setErr(EMPLOYEE_LINK_ERROR)
+          }
+        })
+        .catch(() => setErr(EMPLOYEE_LINK_ERROR))
+      return
+    }
+
+    setErr(EMPLOYEE_LINK_ERROR)
   }, [user, profile, loading, effectiveRole, employeeView])
 
   async function loadData(empId: string) {
