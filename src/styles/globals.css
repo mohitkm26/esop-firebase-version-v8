@@ -272,3 +272,15 @@ textarea.input { resize: vertical; min-height: 80px; }
 .alert-success { background: rgba(45,122,79,0.1); color: #2d7a4f; border: 1px solid rgba(45,122,79,0.2); padding: 12px 16px; border-radius: 8px; font-size: 13px; }
 .alert-error   { background: rgba(181,63,63,0.1); color: #b53f3f; border: 1px solid rgba(181,63,63,0.2); padding: 12px 16px; border-radius: 8px; font-size: 13px; }
 
+
+@media print {
+  body {
+    margin: 20mm;
+  }
+
+  .tbl tr,
+  .tbl td,
+  .tbl th {
+    page-break-inside: avoid;
+  }
+}

@@ -5,10 +5,10 @@ import { doc, getDoc, updateDoc, collection, getDocs, addDoc, query, where, serv
 import { useAuth } from '@/lib/auth-context'
 import { usePlan } from '@/lib/plan-context'
 import Layout from '@/components/layout/Layout'
-import Link from 'next/link'
-import { fmtDate, fmtN, fmtC, today, computeVesting, validateExercise, buildGrantLetterHTML } from '@/lib/utils'
+import { fmtDate, fmtN, fmtC, today, computeVesting, validateExercise } from '@/lib/utils'
 import { logAudit } from '@/lib/audit'
 import { canEdit } from '@/lib/roles'
+import GrantLetterView from '@/components/GrantLetterView'
 
 const STATUS_BADGE: Record<string,string> = {
   draft:'badge badge-muted', issued:'badge badge-blue', pending_acceptance:'badge badge-blue',
@@ -95,21 +95,7 @@ export default function GrantDetail() {
     setSaving(false)
   }
 
-  function viewLetter() {
-    if (!grant || !employee || !companyData) return
-    const vestSched = vestEvents.map((e:any) => ({ date:e.vestDate, quantity:e.optionsCount }))
-    const html = buildGrantLetterHTML({
-      grantNumber:grant.grantNumber, employeeName:employee.name, employeeCode:employee.employeeId||employee.id,
-      grantDate:grant.grantDate, totalOptions:grant.totalOptions, exercisePrice:grant.exercisePrice,
-      vestingSchedule:vestSched, companyName:companyData.companyName||'Company',
-      notes:grant.notes, signatoryName:companyData.signatoryName, signatoryTitle:companyData.signatoryTitle,
-      logoUrl:companyData.logoUrl, letterheadUrl:companyData.letterheadUrl,
-      address:companyData.address, tandc:companyData.tandcTemplate,
-      acceptedAt: grant.acceptedAt || null,
-    })
-    const w = window.open('','_blank')
-    if (w) { w.document.write(html); w.document.close() }
-  }
+
 
   if (busy) return <Layout title="Grant"><div style={{ display:'flex', justifyContent:'center', padding:64 }}><div className="spinner-lg"/></div></Layout>
   if (!grant) return <Layout title="Grant"><div className="alert alert-danger">Grant not found.</div></Layout>
@@ -197,7 +183,6 @@ export default function GrantDetail() {
               {grant.status === 'issued' && <button onClick={()=>updateStatus('accepted')} disabled={saving} className="btn btn-success btn-sm">✓ Mark Accepted (Locks Grant)</button>}
               {['accepted','active'].includes(grant.status) && <button onClick={()=>setShowExForm(true)} className="btn btn-primary btn-sm">💰 Record Exercise</button>}
               {!['cancelled','expired','exercised'].includes(grant.status) && <button onClick={()=>{ if(confirm('Cancel this grant?')) updateStatus('cancelled') }} disabled={saving} className="btn btn-danger btn-sm">✕ Cancel Grant</button>}
-              <button onClick={viewLetter} className="btn btn-secondary btn-sm">📄 View Grant Letter</button>
             </div>
           </div>
         )}
@@ -297,16 +282,15 @@ export default function GrantDetail() {
         )}
 
         {tab === 'letter' && (
-          <div className="card">
-            <p style={{ fontSize:13, color:'var(--text2)', marginBottom:16 }}>The grant letter will open in a new window for printing or PDF export.</p>
-            <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-              <button onClick={viewLetter} className="btn btn-primary">📄 Open Grant Letter</button>
-              {grantTemplateUrl && (
-                <a href={grantTemplateUrl} target="_blank" rel="noreferrer" className="btn btn-secondary">
-                  ⬇️ Download Grant Terms
-                </a>
-              )}
-            </div>
+          <div className="card" style={{ padding: 0, background: 'transparent', border: 'none' }}>
+            <GrantLetterView
+              grant={grant}
+              employee={employee}
+              company={companyData}
+              vestingEvents={vestEvents}
+              companyId={companyId}
+              onGrantUpdated={(updates)=>setGrant((g:any)=>({ ...g, ...updates, acceptedAt: updates.acceptedAt ? new Date().toISOString() : g.acceptedAt }))}
+            />
           </div>
         )}
       </div>
