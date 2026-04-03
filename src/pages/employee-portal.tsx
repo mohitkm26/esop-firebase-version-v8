@@ -5,7 +5,7 @@ import { db, auth } from '@/lib/firebase'
 import { signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth'
 import { collection, getDocs, query, where, orderBy, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { useAuth } from '@/lib/auth-context'
-import { fmtN, fmtC, fmtDate, getLatestValuation, computeVesting, computeVestingStatus } from '@/lib/utils'
+import { fmtN, fmtC, fmtDate, getLatestValuation, computeVesting, computeVestingStatus, buildGrantLetterHTML } from '@/lib/utils'
 import Head from 'next/head'
 import { logAudit } from '@/lib/audit'
 import { findEmployeeByAuthEmail } from '@/lib/employee-lookup'
@@ -22,6 +22,7 @@ export default function EmployeePortal() {
   const [acceptingGrantId, setAcceptingGrantId] = useState('')
   const [acceptBusy, setAcceptBusy] = useState(false)
   const [openedLetters, setOpenedLetters] = useState<Record<string, boolean>>({})
+  const [portalNotice, setPortalNotice] = useState('')
 
   async function handleSignIn() {
     setSigning(true); setErr('')
@@ -36,6 +37,8 @@ export default function EmployeePortal() {
     if (canEdit(effectiveRole)) {
       router.replace('/dashboard'); return
     }
+    if (effectiveRole === 'employee' && profile.employeeId) loadData(profile.employeeId)
+    else setErr(EMPLOYEE_LINK_ERROR)
     if (effectiveRole === 'employee' && profile.employeeId) {
       loadData(profile.employeeId)
       return
@@ -120,6 +123,50 @@ export default function EmployeePortal() {
   }
 
   function openGrantLetter(grant: any) {
+    setPortalNotice('')
+    if (!grant) return
+
+    // 1) Open uploaded letter if available.
+    if (grant.letterUrl) {
+      const w = window.open(grant.letterUrl, '_blank', 'noopener,noreferrer')
+      if (!w) {
+        setPortalNotice('Popup blocked by browser. Please allow popups and try again.')
+        return
+      }
+      setOpenedLetters(prev => ({ ...prev, [grant.id]: true }))
+      return
+    }
+
+    // 2) Fallback: generate a letter so employee can still review and accept.
+    const vestingSchedule = ((data?.vestByGrant?.get(grant.id) || []) as any[])
+      .sort((a: any, b: any) => (a.vestDate || '').localeCompare(b.vestDate || ''))
+      .map((ev: any) => ({ date: ev.vestDate, quantity: ev.optionsCount || 0 }))
+    const html = buildGrantLetterHTML({
+      grantNumber: grant.grantNumber || 'Grant',
+      employeeName: data?.emp?.name || profile?.name || 'Employee',
+      employeeCode: data?.emp?.employeeId || data?.emp?.employeeCode || data?.emp?.id || '—',
+      grantDate: grant.grantDate,
+      totalOptions: grant.totalOptions || 0,
+      exercisePrice: grant.exercisePrice || 0,
+      vestingSchedule,
+      companyName: data?.settings?.companyName || 'Your Company',
+      notes: grant.notes,
+      signatoryName: data?.settings?.signatoryName,
+      signatoryTitle: data?.settings?.signatoryTitle,
+      logoUrl: data?.settings?.logoUrl,
+      letterheadUrl: data?.settings?.letterheadUrl,
+      address: data?.settings?.address,
+      tandc: data?.settings?.tandcTemplate,
+      acceptedAt: grant.acceptedAt || null,
+    })
+    const w = window.open('', '_blank')
+    if (!w) {
+      setPortalNotice('Popup blocked by browser. Please allow popups and try again.')
+      return
+    }
+    w.document.write(html)
+    w.document.close()
+    setOpenedLetters(prev => ({ ...prev, [grant.id]: true }))
     if (!grant?.letterUrl) {
       setErr('Grant letter is not yet available. Please contact HR/admin.')
       return
@@ -232,6 +279,11 @@ export default function EmployeePortal() {
         </div>
 
         <div style={{padding:'32px 24px',maxWidth:900,margin:'0 auto'}}>
+          {portalNotice && (
+            <div style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.35)',borderRadius:10,padding:'10px 12px',fontSize:12,color:'#fca5a5',marginBottom:14}}>
+              {portalNotice}
+            </div>
+          )}
           {/* Header */}
           <div style={{marginBottom:28}}>
             <h1 style={{fontSize:24,fontWeight:800,letterSpacing:'-0.03em',marginBottom:4}}>Hello, {emp.name?.split(' ')[0]} 👋</h1>
