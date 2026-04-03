@@ -272,3 +272,62 @@ textarea.input { resize: vertical; min-height: 80px; }
 .alert-success { background: rgba(45,122,79,0.1); color: #2d7a4f; border: 1px solid rgba(45,122,79,0.2); padding: 12px 16px; border-radius: 8px; font-size: 13px; }
 .alert-error   { background: rgba(181,63,63,0.1); color: #b53f3f; border: 1px solid rgba(181,63,63,0.2); padding: 12px 16px; border-radius: 8px; font-size: 13px; }
 
+
+
+.letterhead {
+  border-bottom: 2px solid #c9a14a;
+  padding-bottom: 10px;
+  margin-bottom: 20px;
+}
+
+.company-name {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.company-address {
+  font-size: 12px;
+  color: #666;
+}
+
+.document-title {
+  margin-top: 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.pdf-content {
+  background: #fff;
+  color: #1a1714;
+}
+
+.page-break {
+  page-break-before: always;
+}
+
+.accepted-stamp {
+  margin-top: 10px;
+  padding: 6px 10px;
+  background: #e6f4ea;
+  color: #1e7e34;
+  font-size: 12px;
+  display: inline-block;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+@media print {
+  body {
+    margin: 20mm;
+  }
+
+  .no-print {
+    display: none;
+  }
+
+  .tbl tr,
+  .tbl td,
+  .tbl th {
+    page-break-inside: avoid;
+  }
+}
