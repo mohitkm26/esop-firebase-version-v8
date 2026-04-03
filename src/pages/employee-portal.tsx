@@ -8,7 +8,6 @@ import { useAuth } from '@/lib/auth-context'
 import { fmtN, fmtC, fmtDate, getLatestValuation, computeVesting, computeVestingStatus } from '@/lib/utils'
 import Head from 'next/head'
 import { logAudit } from '@/lib/audit'
-import { findEmployeeByAuthEmail } from '@/lib/employee-lookup'
 
 const EMPLOYEE_LINK_ERROR = 'Your sign-in email is not linked to any employee record (work_email or personal_email). Please contact HR to update your details.'
 
@@ -21,6 +20,7 @@ export default function EmployeePortal() {
   const [signing, setSigning] = useState(false)
   const [acceptingGrantId, setAcceptingGrantId] = useState('')
   const [acceptBusy, setAcceptBusy] = useState(false)
+  const [openedLetters, setOpenedLetters] = useState<Record<string, boolean>>({})
 
   async function handleSignIn() {
     setSigning(true); setErr('')
@@ -35,25 +35,8 @@ export default function EmployeePortal() {
     if (canEdit(effectiveRole)) {
       router.replace('/dashboard'); return
     }
-    if (effectiveRole === 'employee' && profile.employeeId) {
-      loadData(profile.employeeId)
-      return
-    }
-
-    if (effectiveRole === 'employee') {
-      findEmployeeByAuthEmail(db, profile.email)
-        .then(linkedEmployee => {
-          if (linkedEmployee && linkedEmployee.companyId === profile.companyId) {
-            loadData(linkedEmployee.employeeId)
-          } else {
-            setErr(EMPLOYEE_LINK_ERROR)
-          }
-        })
-        .catch(() => setErr(EMPLOYEE_LINK_ERROR))
-      return
-    }
-
-    setErr(EMPLOYEE_LINK_ERROR)
+    if (effectiveRole === 'employee' && profile.employeeId) loadData(profile.employeeId)
+    else setErr(EMPLOYEE_LINK_ERROR)
   }, [user, profile, loading, effectiveRole, employeeView])
 
   async function loadData(empId: string) {
@@ -116,6 +99,15 @@ export default function EmployeePortal() {
       setErr(e.message || 'Could not accept grant. Please try again.')
     }
     setAcceptBusy(false)
+  }
+
+  function openGrantLetter(grant: any) {
+    if (!grant?.letterUrl) {
+      setErr('Grant letter is not yet available. Please contact HR/admin.')
+      return
+    }
+    setOpenedLetters(prev => ({ ...prev, [grant.id]: true }))
+    window.open(grant.letterUrl, '_blank', 'noopener,noreferrer')
   }
 
   // ── Login screen ───────────────────────────────────────────────────────────
@@ -278,7 +270,14 @@ export default function EmployeePortal() {
                     </div>
                   </div>
                   <div style={{textAlign:'right'}}>
-                    {g.letterUrl&&<a href={g.letterUrl} target="_blank" style={{fontSize:12,color:'#d4a853',textDecoration:'none',display:'block',marginBottom:2}}>📄 Grant Letter</a>}
+                    {g.letterUrl && (
+                      <button
+                        onClick={() => openGrantLetter(g)}
+                        style={{fontSize:12,color:'#d4a853',textDecoration:'none',display:'block',marginBottom:2,background:'none',border:'none',cursor:'pointer',padding:0}}
+                      >
+                        📄 Grant Letter
+                      </button>
+                    )}
                     {g.signedLetterUrl&&<a href={g.signedLetterUrl} target="_blank" style={{fontSize:12,color:'#4ade80',textDecoration:'none'}}>✅ Signed Letter</a>}
                   </div>
                 </div>
@@ -302,7 +301,12 @@ export default function EmployeePortal() {
                         Pending acceptance. Open your grant letter, review till the end, then click <strong>I Accept</strong>.
                       </div>
                       {['issued','pending_acceptance'].includes(g.status||'') && (
-                        <button onClick={()=>setAcceptingGrantId(g.id)} className="btn btn-secondary btn-sm">I Accept</button>
+                        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                          <button onClick={()=>openGrantLetter(g)} className="btn btn-ghost btn-sm">Open Grant Letter</button>
+                          {openedLetters[g.id] && (
+                            <button onClick={()=>setAcceptingGrantId(g.id)} className="btn btn-secondary btn-sm">I Accept</button>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
