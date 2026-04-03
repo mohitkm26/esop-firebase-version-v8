@@ -68,10 +68,9 @@ export function generateInvitePassword(length = 14) {
     .join('')
 }
 
-export function buildInviteLink(token: string, email: string) {
+export function buildInviteLink(_token: string, _email: string) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '')
-  const params = new URLSearchParams({ invite: token, email: email.toLowerCase() })
-  return `${appUrl}/login?${params.toString()}`
+  return `${appUrl}/login`
 }
 
 export async function createInviteRecord(db: Firestore, input: CreateInviteInput) {

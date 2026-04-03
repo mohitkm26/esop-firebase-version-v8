@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
 import { auth, db } from '@/lib/firebase'
-import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, isSignInWithEmailLink } from 'firebase/auth'
+import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
 import Link from 'next/link'
 import { findEmployeeEmailByPersonalId } from '@/lib/personal-id-lookup'
-import { handleInviteLogin, storeEmailForInviteSignIn, storeInviteToken } from '@/lib/invite-login'
 
 export default function Login() {
   const router = useRouter()
@@ -14,45 +13,16 @@ export default function Login() {
   const [error, setError] = useState('')
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
-  const [inviteAuthInProgress, setInviteAuthInProgress] = useState(false)
-  const [inviteFlowDetected, setInviteFlowDetected] = useState(false)
 
-  const inviteToken = useMemo(() => typeof router.query.invite === 'string' ? router.query.invite : '', [router.query.invite])
   const inviteEmail = useMemo(() => typeof router.query.email === 'string' ? router.query.email.toLowerCase() : '', [router.query.email])
 
   useEffect(() => {
     if (!router.isReady || typeof window === 'undefined') return
-
-    const runInviteAutoLogin = async () => {
-      const hasInviteParams = Boolean(inviteToken && inviteEmail)
-      if (!hasInviteParams) return
-
-      setInviteFlowDetected(true)
-      setMode('signin')
-      setIdentifier(inviteEmail)
-      sessionStorage.setItem('pendingInviteToken', inviteToken)
-      storeEmailForInviteSignIn(inviteEmail)
-
-      storeInviteToken(inviteToken)
-      console.info('[invite-login] Invite detected', { inviteEmail, inviteToken })
-
-      setInviteAuthInProgress(true)
-      setError('')
-      setMsg('Setting up your account...')
-
-      try {
-        await handleInviteLogin({ auth, db, email: inviteEmail, inviteToken })
-        await router.replace('/dashboard')
-      } catch (e: any) {
-        setError(e?.message || 'We could not complete invite sign-in. You can continue with manual login.')
-        setMsg('')
-      } finally {
-        setInviteAuthInProgress(false)
-      }
-    }
-
-    runInviteAutoLogin()
-  }, [inviteEmail, inviteToken, router, router.isReady])
+    if (!inviteEmail) return
+    setMode('signin')
+    setIdentifier(inviteEmail)
+    setMsg('Invite detected. Please sign in with your login ID and temporary password.')
+  }, [inviteEmail, router.isReady])
 
   async function googleLogin() {
     setLoading(true); setError('')
@@ -130,20 +100,13 @@ export default function Login() {
       <div style={{ width:460, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', padding:32 }}>
         <div style={{ width:'100%', maxWidth:380 }}>
           <h2 style={{ fontSize:22, fontWeight:800, color:'var(--text)', margin:'0 0 6px' }}>
-            {inviteAuthInProgress ? 'Accepting invite' : mode==='signin'?'Welcome back':mode==='signup'?'Create account':'Reset password'}
+            {mode==='signin'?'Welcome back':mode==='signup'?'Create account':'Reset password'}
           </h2>
 
           {error && <div className="alert alert-danger mb-4">{error}</div>}
           {msg && <div className="alert alert-success mb-4">{msg}</div>}
 
-          {inviteFlowDetected && inviteAuthInProgress ? (
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12, padding:'28px 0' }}>
-              <div style={{ width:32, height:32, border:'3px solid var(--border)', borderTop:'3px solid var(--accent)', borderRadius:'50%', animation:'spin 0.9s linear infinite' }} />
-              <p style={{ margin:0, color:'var(--text3)', fontSize:13 }}>Setting up your account...</p>
-              <style jsx>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-            </div>
-          ) : (
-            <>
+          <>
               {mode !== 'reset' && (
                 <>
                   <button onClick={googleLogin} disabled={loading} className="btn btn-secondary" style={{ width:'100%', justifyContent:'center', padding:'11px', fontSize:14, marginBottom:20 }}>
@@ -182,10 +145,9 @@ export default function Login() {
                 </button>
               </form>
             </>
-          )}
 
           <div style={{ marginTop:20, textAlign:'center', display:'flex', flexDirection:'column', gap:8 }}>
-            {mode === 'signin' && !inviteAuthInProgress && (
+            {mode === 'signin' && (
               <>
                 <button onClick={()=>{setMode('signup');setError('');setMsg('')}} style={{ background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:13,fontWeight:600 }}>
                   Don't have an account? Sign up
@@ -195,7 +157,7 @@ export default function Login() {
                 </button>
               </>
             )}
-            {mode !== 'signin' && !inviteAuthInProgress && (
+            {mode !== 'signin' && (
               <button onClick={()=>{setMode('signin');setError('');setMsg('')}} style={{ background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:13,fontWeight:600 }}>
                 Back to Sign In
               </button>
