@@ -103,7 +103,7 @@ export default function GrantLetterView({
       await updateDoc(doc(db, 'companies', grantDocPathCompanyId, 'grants', grant.id), updates)
       onGrantUpdated?.(updates)
       setToast(nextStatus === 'accepted' ? 'Grant accepted successfully' : 'Grant rejected successfully')
-    } catch {
+    } catch (error) {
       setToast('Could not update grant status. Please try again.')
     }
 
@@ -112,53 +112,14 @@ export default function GrantLetterView({
 
   const generateGrantPDF = async () => {
     const element = document.getElementById('grant-letter-container')
-
-    if (!element) {
-      console.error('Grant container not found')
-      return
-    }
-
-    console.log(element.innerHTML)
-
-    await new Promise((resolve) => setTimeout(resolve, 500))
-
-    if ((document as any).fonts) {
-      await (document as any).fonts.ready
-    }
+    if (!element) return
 
     if (!window.html2pdf) {
       setToast('PDF library not ready yet. Please wait a moment and try again.')
       return
     }
 
-    const originalHeight = element.style.height
-    const originalOverflow = element.style.overflow
-
-    element.style.height = 'auto'
-    element.style.overflow = 'visible'
-
-    const opt = {
-      margin: [10, 10, 10, 10],
-      filename: `Grant_${grant?.ref || grant?.grantNumber || grant?.id}.pdf`,
-      image: { type: 'jpeg', quality: 1 },
-      html2canvas: {
-        scale: 3,
-        useCORS: true,
-        scrollY: 0,
-      },
-      jsPDF: {
-        unit: 'mm',
-        format: 'a4',
-        orientation: 'portrait',
-      },
-    }
-
-    try {
-      await window.html2pdf().set(opt).from(element).save()
-    } finally {
-      element.style.height = originalHeight
-      element.style.overflow = originalOverflow
-    }
+    await window.html2pdf().from(element).save(`Grant_${grant?.grantNumber || grant?.ref || grant?.id}.pdf`)
   }
 
   return (
@@ -188,82 +149,78 @@ export default function GrantLetterView({
             lineHeight: 1.65,
           }}
         >
-          <div className="pdf-content">
-            <div className="letterhead">
-              <div className="company-name">{company?.companyName || company?.name || 'Company'}</div>
-              <div className="company-address">{company?.address || '—'}</div>
-              <div className="document-title">Employee Stock Option Grant Letter</div>
-            </div>
-
-            <h3 style={{ marginBottom: 10 }}>Grant Details</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, marginBottom: 20 }}>
-              <div><strong>Employee Name:</strong> {employee?.name || grant?.employeeName || '—'}</div>
-              <div><strong>Grant Ref:</strong> {grant?.grantNumber || grant?.ref || grant?.id}</div>
-              <div><strong>Grant Date:</strong> {fmtDate(grant?.grantDate)}</div>
-              <div><strong>Options:</strong> {fmtN(grant?.totalOptions || 0)}</div>
-              <div><strong>Exercise Price:</strong> {fmtC(grant?.exercisePrice || 0)}</div>
-            </div>
-
-            <h3 style={{ marginBottom: 10 }}>Vesting Schedule</h3>
-            <table className="tbl" style={{ marginBottom: 24, pageBreakInside: 'avoid' }}>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Options</th>
-                </tr>
-              </thead>
-              <tbody>
-                {schedule.length === 0 ? (
-                  <tr>
-                    <td colSpan={2} style={{ color: 'var(--text3)' }}>No vesting schedule available.</td>
-                  </tr>
-                ) : (
-                  schedule.map((row, idx) => (
-                    <tr key={`${row.date}-${idx}`}>
-                      <td>{fmtDate(row.date)}</td>
-                      <td>{fmtN(row.options)}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-
-            <h3 style={{ marginBottom: 8 }}>Signature</h3>
-            <div style={{ marginBottom: 20 }}>
-              <div>Authorized Signatory: {company?.signatoryName || '________________'}</div>
-              <div>Designation: {company?.signatoryTitle || '________________'}</div>
-            </div>
-
-            <div className="page-break" />
-            <h3 style={{ marginBottom: 8 }}>Employee Acceptance</h3>
-            {isAccepted ? (
-              <div style={{ marginBottom: 20 }}>
-                <p>
-                  I, {employee?.name || grant?.employeeName || 'Employee'}, hereby accept the grant of {fmtN(grant?.totalOptions || 0)} stock options under Grant Ref: {grant?.grantNumber || grant?.ref || grant?.id}
-                </p>
-                <div className="accepted-stamp">✔ Digitally accepted on {formatAcceptanceDateTime(grant?.acceptedAt)}</div>
-                <div style={{ marginTop: 12 }}>Employee Signature: ____________________</div>
-                <div>Date: {formatAcceptanceDateTime(grant?.acceptedAt).split(' & ')[0] || '____________________'}</div>
-              </div>
-            ) : (
-              <div style={{ marginBottom: 20 }}>
-                <div>Employee Signature: ____________________</div>
-                <div>Date: ____________________</div>
-              </div>
-            )}
-
-            {!!company?.tandcTemplate && (
-              <>
-                <div className="page-break" />
-                <h3 style={{ marginBottom: 8 }}>Annexure / Terms</h3>
-                <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text2)' }}>{company.tandcTemplate}</div>
-              </>
-            )}
+          <div style={{ marginBottom: 20 }}>
+            <h2 style={{ marginBottom: 6 }}>{company?.companyName || company?.name || 'Company'}</h2>
+            <div style={{ fontSize: 13, color: 'var(--text2)' }}>{company?.address || '—'}</div>
           </div>
+
+          <h3 style={{ marginBottom: 10 }}>Grant Details</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, marginBottom: 20 }}>
+            <div><strong>Employee Name:</strong> {employee?.name || grant?.employeeName || '—'}</div>
+            <div><strong>Grant Ref:</strong> {grant?.grantNumber || grant?.ref || grant?.id}</div>
+            <div><strong>Grant Date:</strong> {fmtDate(grant?.grantDate)}</div>
+            <div><strong>Options:</strong> {fmtN(grant?.totalOptions || 0)}</div>
+            <div><strong>Exercise Price:</strong> {fmtC(grant?.exercisePrice || 0)}</div>
+          </div>
+
+          <h3 style={{ marginBottom: 10 }}>Vesting Schedule</h3>
+          <table className="tbl" style={{ marginBottom: 24, pageBreakInside: 'avoid' }}>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Options</th>
+              </tr>
+            </thead>
+            <tbody>
+              {schedule.length === 0 ? (
+                <tr>
+                  <td colSpan={2} style={{ color: 'var(--text3)' }}>No vesting schedule available.</td>
+                </tr>
+              ) : (
+                schedule.map((row, idx) => (
+                  <tr key={`${row.date}-${idx}`}>
+                    <td>{fmtDate(row.date)}</td>
+                    <td>{fmtN(row.options)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+
+          <h3 style={{ marginBottom: 8 }}>Signature</h3>
+          <div style={{ marginBottom: 20 }}>
+            <div>Authorized Signatory: {company?.signatoryName || '________________'}</div>
+            <div>Designation: {company?.signatoryTitle || '________________'}</div>
+          </div>
+
+          <h3 style={{ marginBottom: 8 }}>Employee Acceptance</h3>
+          {isAccepted ? (
+            <div style={{ marginBottom: 20 }}>
+              <p>
+                I, {employee?.name || grant?.employeeName || 'Employee'}, hereby accept the grant of {fmtN(grant?.totalOptions || 0)} stock options under Grant Ref: {grant?.grantNumber || grant?.ref || grant?.id}
+              </p>
+              <p style={{ color: '#2d7a4f', fontWeight: 700 }}>
+                ✔ Digitally accepted on {formatAcceptanceDateTime(grant?.acceptedAt)}
+              </p>
+              <div>Employee Signature: ____________________</div>
+              <div>Date: {formatAcceptanceDateTime(grant?.acceptedAt).split(' & ')[0] || '____________________'}</div>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 20 }}>
+              <div>Employee Signature: ____________________</div>
+              <div>Date: ____________________</div>
+            </div>
+          )}
+
+          {!!company?.tandcTemplate && (
+            <>
+              <h3 style={{ marginBottom: 8 }}>Annexure / Terms</h3>
+              <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text2)' }}>{company.tandcTemplate}</div>
+            </>
+          )}
         </div>
 
         <div
-          className="no-print"
           style={{
             position: 'sticky',
             bottom: 0,
@@ -292,7 +249,7 @@ export default function GrantLetterView({
         </div>
       </div>
 
-      {toast && <div className="alert alert-success no-print" style={{ marginTop: 12 }}>{toast}</div>}
+      {toast && <div className="alert alert-success" style={{ marginTop: 12 }}>{toast}</div>}
     </>
   )
 }
