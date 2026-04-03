@@ -52,6 +52,7 @@ export default function NewEmployee() {
         email: form.email.toLowerCase(),
         role: 'employee',
         inviteLink: invite.inviteLink,
+        tempPassword: invite.tempPassword,
         inviteKind: 'employee',
         companyId,
         employeeName: form.name,

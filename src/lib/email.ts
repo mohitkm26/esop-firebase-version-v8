@@ -3,6 +3,7 @@ export interface InviteEmailRequest {
   to: string
   employeeName: string
   loginLink: string
+  tempPassword: string
   role: string
   inviteKind: 'user' | 'employee'
   companyId: string
