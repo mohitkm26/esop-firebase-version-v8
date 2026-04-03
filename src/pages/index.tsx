@@ -30,7 +30,7 @@ const BLOG_PREVIEW = [
 ]
 
 export default function Landing() {
-  const { user, profile, loading } = useAuth()
+  const { user, profile, loading, effectiveRole } = useAuth()
   const router = useRouter()
   const [contact, setContact] = useState({ name:'', email:'', company:'', message:'' })
   const [submitted, setSubmitted] = useState(false)
@@ -39,11 +39,11 @@ export default function Landing() {
   useEffect(() => {
     if (loading) return
     if (user && profile) {
-      if (profile.role === 'superAdmin') router.replace('/admin')
-      else if (profile.role === 'employee') router.replace('/employee-portal')
+      if (effectiveRole === 'superAdmin') router.replace('/admin')
+      else if (effectiveRole === 'employee') router.replace('/employee-portal')
       else router.replace('/dashboard')
     }
-  }, [loading, user, profile])
+  }, [loading, user, profile, effectiveRole])
 
   async function submitContact(e: React.FormEvent) {
     e.preventDefault()

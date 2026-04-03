@@ -10,7 +10,7 @@ import { fmtN, fmtDate, computeVesting } from '@/lib/utils'
 import { canAdmin } from '@/lib/roles'
 
 export default function Dashboard() {
-  const { user, profile, loading } = useAuth()
+  const { user, profile, loading, effectiveRole } = useAuth()
   const { companyId, companyData } = usePlan()
   const router = useRouter()
   const [stats, setStats] = useState({ employees:0, grants:0, totalOptions:0, vestedPct:0, exercised:0 })
@@ -20,8 +20,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login')
-    if (!loading && profile && profile.role === 'employee') router.replace('/employee-portal')
-  }, [user, loading, profile])
+    if (!loading && profile && effectiveRole === 'employee') router.replace('/employee-portal')
+  }, [user, loading, profile, effectiveRole])
 
   useEffect(() => {
     if (!user || !companyId) return
@@ -143,7 +143,7 @@ export default function Dashboard() {
         </div>
 
         {/* Quick actions */}
-        {canAdmin(profile?.role) && (
+        {canAdmin(effectiveRole) && (
           <div className="card mt-4">
             <h3 className="section-title mb-4">Quick Actions</h3>
             <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>

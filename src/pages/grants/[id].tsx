@@ -105,6 +105,7 @@ export default function GrantDetail() {
       notes:grant.notes, signatoryName:companyData.signatoryName, signatoryTitle:companyData.signatoryTitle,
       logoUrl:companyData.logoUrl, letterheadUrl:companyData.letterheadUrl,
       address:companyData.address, tandc:companyData.tandcTemplate,
+      acceptedAt: grant.acceptedAt || null,
     })
     const w = window.open('','_blank')
     if (w) { w.document.write(html); w.document.close() }

@@ -1,23 +1,27 @@
-import { canEdit, isEmployeeOnly } from '@/lib/roles'
+import { canEdit } from '@/lib/roles'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { db, auth } from '@/lib/firebase'
 import { signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth'
-import { collection, getDocs, query, where, orderBy, doc, getDoc } from 'firebase/firestore'
+import { collection, getDocs, query, where, orderBy, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { useAuth } from '@/lib/auth-context'
-import { fmtN, fmtC, fmtDate, getLatestValuation, computeVesting, computeVestingStatus } from '@/lib/utils'
+import { fmtN, fmtC, fmtDate, getLatestValuation, computeVesting, computeVestingStatus, buildGrantLetterHTML } from '@/lib/utils'
 import Head from 'next/head'
+import { logAudit } from '@/lib/audit'
 
-const G = (color: string, opacity=1) => `rgba(${color},${opacity})`
 const EMPLOYEE_LINK_ERROR = 'Your sign-in email is not linked to any employee record (work_email or personal_email). Please contact HR to update your details.'
 
 export default function EmployeePortal() {
-  const { user, profile, loading } = useAuth()
+  const { user, profile, loading, effectiveRole, employeeView } = useAuth()
   const router = useRouter()
   const [data, setData]   = useState<any>(null)
   const [busy, setBusy]   = useState(false)
   const [err,  setErr]    = useState('')
   const [signing, setSigning] = useState(false)
+  const [acceptingGrantId, setAcceptingGrantId] = useState('')
+  const [acceptBusy, setAcceptBusy] = useState(false)
+  const [openedLetters, setOpenedLetters] = useState<Record<string, boolean>>({})
+  const [portalNotice, setPortalNotice] = useState('')
 
   async function handleSignIn() {
     setSigning(true); setErr('')
@@ -29,12 +33,12 @@ export default function EmployeePortal() {
   useEffect(() => {
     if (loading || !user || !profile) return
     // HR/Admin/Editor users go to dashboard — this portal is for employees only
-    if (canEdit(profile?.role)) {
+    if (canEdit(effectiveRole)) {
       router.replace('/dashboard'); return
     }
-    if (profile.role === 'employee' && profile.employeeId) loadData(profile.employeeId)
+    if (effectiveRole === 'employee' && profile.employeeId) loadData(profile.employeeId)
     else setErr(EMPLOYEE_LINK_ERROR)
-  }, [user, profile, loading])
+  }, [user, profile, loading, effectiveRole, employeeView])
 
   async function loadData(empId: string) {
     setBusy(true); setErr('')
@@ -62,7 +66,88 @@ export default function EmployeePortal() {
     setBusy(false)
   }
 
-  const todayStr = new Date().toISOString().split('T')[0]
+  async function acceptGrant(grant: any) {
+    if (!profile || !user || !data) return
+    setAcceptBusy(true)
+    try {
+      const updates: any = {
+        status: 'accepted',
+        locked: true,
+        acceptedAt: serverTimestamp(),
+        acceptedBy: user.uid,
+        acceptedByEmail: profile.email || '',
+        acceptanceSource: 'employee_portal',
+        updatedAt: serverTimestamp(),
+      }
+      await updateDoc(doc(db, 'companies', profile.companyId, 'grants', grant.id), updates)
+      await logAudit({
+        companyId: profile.companyId,
+        userId: user.uid,
+        userEmail: profile.email || '',
+        action: 'grant_accepted',
+        entityType: 'grant',
+        entityId: grant.id,
+        entityLabel: grant.grantNumber,
+        before: { status: grant.status },
+        after: { status: 'accepted', acceptedBy: profile.email || '' },
+      })
+      setData((prev: any) => ({
+        ...prev,
+        grants: prev.grants.map((g: any) => g.id === grant.id ? ({ ...g, ...updates, acceptedAt: new Date().toISOString() }) : g)
+      }))
+      setAcceptingGrantId('')
+    } catch (e: any) {
+      setErr(e.message || 'Could not accept grant. Please try again.')
+    }
+    setAcceptBusy(false)
+  }
+
+  function openGrantLetter(grant: any) {
+    setPortalNotice('')
+    if (!grant) return
+
+    // 1) Open uploaded letter if available.
+    if (grant.letterUrl) {
+      const w = window.open(grant.letterUrl, '_blank', 'noopener,noreferrer')
+      if (!w) {
+        setPortalNotice('Popup blocked by browser. Please allow popups and try again.')
+        return
+      }
+      setOpenedLetters(prev => ({ ...prev, [grant.id]: true }))
+      return
+    }
+
+    // 2) Fallback: generate a letter so employee can still review and accept.
+    const vestingSchedule = ((data?.vestByGrant?.get(grant.id) || []) as any[])
+      .sort((a: any, b: any) => (a.vestDate || '').localeCompare(b.vestDate || ''))
+      .map((ev: any) => ({ date: ev.vestDate, quantity: ev.optionsCount || 0 }))
+    const html = buildGrantLetterHTML({
+      grantNumber: grant.grantNumber || 'Grant',
+      employeeName: data?.emp?.name || profile?.name || 'Employee',
+      employeeCode: data?.emp?.employeeId || data?.emp?.employeeCode || data?.emp?.id || '—',
+      grantDate: grant.grantDate,
+      totalOptions: grant.totalOptions || 0,
+      exercisePrice: grant.exercisePrice || 0,
+      vestingSchedule,
+      companyName: data?.settings?.companyName || 'Your Company',
+      notes: grant.notes,
+      signatoryName: data?.settings?.signatoryName,
+      signatoryTitle: data?.settings?.signatoryTitle,
+      logoUrl: data?.settings?.logoUrl,
+      letterheadUrl: data?.settings?.letterheadUrl,
+      address: data?.settings?.address,
+      tandc: data?.settings?.tandcTemplate,
+      acceptedAt: grant.acceptedAt || null,
+    })
+    const w = window.open('', '_blank')
+    if (!w) {
+      setPortalNotice('Popup blocked by browser. Please allow popups and try again.')
+      return
+    }
+    w.document.write(html)
+    w.document.close()
+    setOpenedLetters(prev => ({ ...prev, [grant.id]: true }))
+  }
 
   // ── Login screen ───────────────────────────────────────────────────────────
   const loginScreen = (
@@ -118,6 +203,14 @@ export default function EmployeePortal() {
 
   const {emp, grants, vestByGrant, fv, vals} = data
   const companyName = data.settings?.companyName || 'Your Company'
+  const orderedGrants = [...grants].sort((a: any, b: any) => (b.grantDate || '').localeCompare(a.grantDate || ''))
+  const pendingAcceptance = orderedGrants.filter((g: any) => ['issued', 'pending_acceptance'].includes(g.status || ''))
+  const formatAcceptedAt = (value: any) => {
+    if (!value) return null
+    if (typeof value === 'string') return new Date(value)
+    if (typeof value?.toDate === 'function') return value.toDate()
+    return null
+  }
 
   // Aggregate totals
   let totGranted=0, totVested=0, totLapsed=0, totExercised=0, totPending=0
@@ -160,6 +253,11 @@ export default function EmployeePortal() {
         </div>
 
         <div style={{padding:'32px 24px',maxWidth:900,margin:'0 auto'}}>
+          {portalNotice && (
+            <div style={{background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.35)',borderRadius:10,padding:'10px 12px',fontSize:12,color:'#fca5a5',marginBottom:14}}>
+              {portalNotice}
+            </div>
+          )}
           {/* Header */}
           <div style={{marginBottom:28}}>
             <h1 style={{fontSize:24,fontWeight:800,letterSpacing:'-0.03em',marginBottom:4}}>Hello, {emp.name?.split(' ')[0]} 👋</h1>
@@ -181,10 +279,16 @@ export default function EmployeePortal() {
             {fv>0&&<Stat label="Current Value" val={fmtC(currentValue)} color="#d4a853" sub={`@ ${fmtC(fv)}/option`}/>}
           </div>
 
+          {pendingAcceptance.length > 0 && (
+            <div style={{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:12,padding:'12px 14px',marginBottom:18,fontSize:12,color:'#fcd34d'}}>
+              ⏳ You have {pendingAcceptance.length} grant letter{pendingAcceptance.length>1?'s':''} pending acceptance.
+            </div>
+          )}
+
           {/* Per-grant detail */}
-          <div style={{fontWeight:700,fontSize:15,marginBottom:14}}>Your Grants ({grants.length})</div>
+          <div style={{fontWeight:700,fontSize:15,marginBottom:14}}>Your Grants ({orderedGrants.length})</div>
           {grants.length === 0 && <div style={{color:'#6b6b6b',fontSize:13}}>No grants assigned yet. Contact HR.</div>}
-          {grants.map((g:any)=>{
+          {orderedGrants.map((g:any)=>{
             const evs = (vestByGrant.get(g.id)||[])
               .map((ev:any)=>({...ev, status:computeVestingStatus(ev.vestDate,emp.exitDate,ev.status)}))
               .sort((a:any,b:any)=>a.vestDate.localeCompare(b.vestDate))
@@ -202,6 +306,7 @@ export default function EmployeePortal() {
                     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
                       <span style={{background:'rgba(212,168,83,0.12)',border:'1px solid rgba(212,168,83,0.2)',color:'#d4a853',fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:5}}>{g.grantNumber}</span>
                       <span style={{fontSize:12,color:'#6b6b6b'}}>Granted {fmtDate(g.grantDate)}</span>
+                      <span style={{fontSize:11,padding:'2px 8px',borderRadius:99,border:'1px solid #2a2a2a',color:'#c9c9c9',textTransform:'capitalize'}}>{(g.status||'issued').replace(/_/g,' ')}</span>
                     </div>
                     <div style={{fontSize:11,color:'#6b6b6b'}}>
                       Exercise Price: <strong style={{color:'#f5f0e8'}}>{fmtC(g.exercisePrice||0)}</strong>
@@ -209,9 +314,46 @@ export default function EmployeePortal() {
                     </div>
                   </div>
                   <div style={{textAlign:'right'}}>
-                    {g.letterUrl&&<a href={g.letterUrl} target="_blank" style={{fontSize:12,color:'#d4a853',textDecoration:'none',display:'block',marginBottom:2}}>📄 Grant Letter</a>}
+                    {g.letterUrl && (
+                      <button
+                        onClick={() => openGrantLetter(g)}
+                        style={{fontSize:12,color:'#d4a853',textDecoration:'none',display:'block',marginBottom:2,background:'none',border:'none',cursor:'pointer',padding:0}}
+                      >
+                        📄 Grant Letter
+                      </button>
+                    )}
                     {g.signedLetterUrl&&<a href={g.signedLetterUrl} target="_blank" style={{fontSize:12,color:'#4ade80',textDecoration:'none'}}>✅ Signed Letter</a>}
                   </div>
+                </div>
+
+                <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid #2a2a2a',borderRadius:10,padding:'10px 12px',marginBottom:14,fontSize:12}}>
+                  <div style={{fontWeight:700,marginBottom:6,color:'#d4a853'}}>Employee Acceptance</div>
+                  {g.acceptedAt || g.signedLetterUrl ? (
+                    <div style={{color:'#4ade80'}}>
+                      {(() => {
+                        const acceptedDate = formatAcceptedAt(g.acceptedAt)
+                        if (acceptedDate) {
+                          return <>✅ Digitally accepted on {acceptedDate.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })} & {acceptedDate.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}</>
+                        }
+                        return <>✅ Accepted (signed letter on record)</>
+                      })()}
+                      {g.signedLetterUrl && <span style={{color:'#86efac'}}> · Physical signed letter uploaded</span>}
+                    </div>
+                  ) : (
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
+                      <div style={{color:'#f5f0e8'}}>
+                        Pending acceptance. Open your grant letter, review till the end, then click <strong>I Accept</strong>.
+                      </div>
+                      {['issued','pending_acceptance'].includes(g.status||'') && (
+                        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                          <button onClick={()=>openGrantLetter(g)} className="btn btn-ghost btn-sm">Open Grant Letter</button>
+                          {openedLetters[g.id] && (
+                            <button onClick={()=>setAcceptingGrantId(g.id)} className="btn btn-secondary btn-sm">I Accept</button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Stats row */}
@@ -270,6 +412,28 @@ export default function EmployeePortal() {
           })}
         </div>
       </div>
+      {acceptingGrantId && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.68)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,padding:20}}>
+          <div style={{width:'100%',maxWidth:700,background:'#141414',border:'1px solid #2a2a2a',borderRadius:14,padding:16}}>
+            <h3 style={{marginBottom:10}}>Grant Letter Acceptance</h3>
+            <div style={{maxHeight:300,overflowY:'auto',border:'1px solid #242424',borderRadius:8,padding:12,fontSize:13,color:'#d0d0d0',lineHeight:1.7,marginBottom:12}}>
+              <p>Please review this grant letter completely.</p>
+              <p>By clicking <strong>I Accept</strong>, you consent to the grant terms and your grant will be locked.</p>
+              <p>This action records a digital acceptance timestamp in the employee acceptance section.</p>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}>
+              <button onClick={()=>setAcceptingGrantId('')} className="btn btn-ghost btn-sm">Cancel</button>
+              <button
+                onClick={()=>acceptGrant(orderedGrants.find((g:any)=>g.id===acceptingGrantId))}
+                disabled={acceptBusy}
+                className="btn btn-success btn-sm"
+              >
+                {acceptBusy ? 'Accepting...' : 'I Accept'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

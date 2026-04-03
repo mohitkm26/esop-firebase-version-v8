@@ -161,10 +161,11 @@ export function buildGrantLetterHTML(params: {
   companyName: string; notes?: string
   signatoryName?: string; signatoryTitle?: string
   logoUrl?: string; letterheadUrl?: string; address?: string; tandc?: string
+  acceptedAt?: string | Date | { toDate?: () => Date } | null
 }) {
   const { grantNumber,employeeName,employeeCode,grantDate,totalOptions,exercisePrice,
     vestingSchedule,companyName,notes,signatoryName,signatoryTitle,
-    logoUrl,letterheadUrl,address,tandc } = params
+    logoUrl,letterheadUrl,address,tandc,acceptedAt } = params
   const rows = vestingSchedule.reduce((acc:{html:string,cum:number},ev) => {
     acc.cum += ev.quantity
     acc.html += `<tr><td style="padding:8px 12px;border-bottom:1px solid #eee">${fmtDate(ev.date)}</td>
@@ -180,6 +181,15 @@ export function buildGrantLetterHTML(params: {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
   const tandcFormatted = escapeHtml(tandc || defaultTC).replace(/\n/g, '<br/>')
+  const acceptedDate =
+    !acceptedAt ? null
+      : acceptedAt instanceof Date ? acceptedAt
+      : typeof (acceptedAt as any)?.toDate === 'function' ? (acceptedAt as any).toDate()
+      : new Date(acceptedAt as string)
+  const hasAcceptedDate = Boolean(acceptedDate && !isNaN(acceptedDate.getTime()))
+  const acceptedStamp = hasAcceptedDate
+    ? `✅ Digitally accepted on ${acceptedDate!.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })} & ${acceptedDate!.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', hour12:false })}`
+    : ''
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
@@ -234,6 +244,7 @@ ${notes ? `<div class="note"><strong>Notes:</strong> ${notes}</div>` : ''}
 <div class="accept">
   <h3 style="margin:0 0 12px;color:#c8922a">Employee Acceptance</h3>
   <p style="font-size:13px">I, <strong>${employeeName}</strong>, hereby accept the grant of ${fmtN(totalOptions)} stock options under Grant Ref: <strong>${grantNumber}</strong>, and agree to be bound by the terms of the ESOP Plan.</p>
+  ${hasAcceptedDate ? `<div style="display:inline-block;background:#111;color:#22c55e;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;margin:8px 0 10px">☑ ${acceptedStamp}</div>` : ''}
   <table style="width:100%;margin-top:20px"><tr>
     <td style="width:50%"><div style="border-top:1px solid #333;padding-top:6px;margin-top:40px">Employee Signature</div></td>
     <td style="width:50%;text-align:right"><div style="border-top:1px solid #333;padding-top:6px;margin-top:40px">Date</div></td>
