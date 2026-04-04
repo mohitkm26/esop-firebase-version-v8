@@ -56,19 +56,60 @@ export default function Login() {
         await createUserWithEmailAndPassword(auth, normalizedInput, password)
         router.replace('/')
       } else {
-        const signInEmail = isEmailInput
-          ? normalizedInput
-          : await findEmployeeEmailByPersonalId(db, normalizedInput)
+  const signInEmail = isEmailInput
+    ? normalizedInput
+    : await findEmployeeEmailByPersonalId(db, normalizedInput)
 
-        if (!signInEmail) {
-          setError('No employee record found for this Personal ID.')
-          setLoading(false)
+  if (!signInEmail) {
+    setError('No employee record found for this Personal ID.')
+    setLoading(false)
+    return
+  }
+
+  try {
+    // Returning user — account already exists
+    await signInWithEmailAndPassword(auth, signInEmail, password)
+    router.replace('/')
+  } catch (signInErr: any) {
+    if (
+      signInErr.code === 'auth/user-not-found' ||
+      signInErr.code === 'auth/invalid-credential'
+    ) {
+      // Account does not exist in Firebase Auth yet.
+      // This is a first-time invited user — verify the password
+      // matches their pending invite before creating the account.
+      try {
+        const invSnap = await getDocs(query(
+          collection(db, 'invites'),
+          where('email', '==', signInEmail),
+          where('tempPassword', '==', password),
+          where('status', '==', 'pending'),
+          limit(1)
+        ))
+        if (invSnap.empty) {
+          setError('Invalid email or password.')
           return
         }
-
-        await signInWithEmailAndPassword(auth, signInEmail, password)
+        // Valid invite — create the Firebase Auth account now
+        await createUserWithEmailAndPassword(auth, signInEmail, password)
         router.replace('/')
+      } catch (createErr: any) {
+        if (createErr.code === 'auth/email-already-in-use') {
+          setError('Account exists but password is wrong. Use "Forgot password?" to reset.')
+        } else {
+          setError(createErr.message || 'Could not create account. Contact your admin.')
+        }
       }
+    } else {
+      const codes: Record<string, string> = {
+        'auth/wrong-password':   'Incorrect password.',
+        'auth/invalid-email':    'Please enter a valid email address.',
+        'auth/too-many-requests':'Too many attempts. Please wait a moment.',
+      }
+      setError(codes[signInErr.code] || signInErr.message || 'Authentication failed.')
+    }
+  }
+}
     } catch(e:any) {
       const codes: Record<string,string> = {
         'auth/user-not-found': 'No account found with this email.',
