@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import Head from 'next/head'
-import Script from 'next/script'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth-context'
@@ -21,12 +20,6 @@ type Props = {
   vestingEvents?: VestingRow[]
   companyId?: string
   onGrantUpdated?: (updates: Record<string, any>) => void
-}
-
-declare global {
-  interface Window {
-    html2pdf?: any
-  }
 }
 
 const formatAcceptanceDateTime = (value: any) => {
@@ -110,66 +103,88 @@ export default function GrantLetterView({
     setActionBusy(false)
   }
 
-  const generateGrantPDF = async () => {
-    const element = document.getElementById('grant-letter-container')
+  const generateGrantPDF = () => {
+    const content = document.getElementById('grant-letter-container')
 
-    if (!element) {
-      alert('Grant container not found')
+    if (!content) {
+      alert('Grant content not found')
       return
     }
 
-    if (!window.html2pdf) {
-      alert('PDF library not loaded')
+    const printWindow = window.open('', '_blank')
+
+    if (!printWindow) {
+      alert('Popup blocked. Please allow popups.')
       return
     }
 
-    // Ensure full render (fix blank PDF timing issue)
-    await new Promise((resolve) => setTimeout(resolve, 800))
+    printWindow.document.write(`
+    <html>
+      <head>
+        <title>Grant Letter</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            color: #000;
+          }
 
-    if (document.fonts) {
-      await document.fonts.ready
-    }
+          h2, h3 {
+            margin-top: 20px;
+          }
 
-    console.log('HTML length:', element.innerHTML.length)
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
 
-    // Clone node to avoid UI/scroll issues
-    const clone = element.cloneNode(true) as HTMLElement
+          th, td {
+            padding: 8px;
+            border: 1px solid #ddd;
+          }
 
-    clone.style.height = 'auto'
-    clone.style.maxHeight = 'none'
-    clone.style.overflow = 'visible'
-    clone.style.position = 'fixed'
-    clone.style.top = '0'
-    clone.style.left = '0'
-    clone.style.zIndex = '-1'
-    clone.style.background = 'white'
+          th {
+            background: #f3f4f6;
+          }
 
-    document.body.appendChild(clone)
+          .letterhead {
+            border-bottom: 2px solid #c9a14a;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+          }
 
-    const opt = {
-      margin: 10,
-      filename: `Grant_${Date.now()}.pdf`,
-      image: { type: 'jpeg', quality: 1 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        scrollY: 0,
-      },
-      jsPDF: {
-        unit: 'mm',
-        format: 'a4',
-        orientation: 'portrait',
-      },
-    }
+          .accepted-stamp {
+            margin-top: 10px;
+            padding: 6px 10px;
+            background: #e6f4ea;
+            color: #1e7e34;
+            display: inline-block;
+            border-radius: 4px;
+          }
 
-    try {
-      await window.html2pdf().set(opt).from(clone).save()
-    } catch (err) {
-      console.error(err)
-      alert('PDF generation failed')
-    }
+          .no-print {
+            display: none;
+          }
 
-    document.body.removeChild(clone)
+          @media print {
+            body {
+              margin: 0;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        ${content.innerHTML}
+      </body>
+    </html>
+  `)
+
+    printWindow.document.close()
+
+    setTimeout(() => {
+      printWindow.print()
+      printWindow.close()
+    }, 500)
   }
 
   return (
@@ -177,8 +192,6 @@ export default function GrantLetterView({
       <Head>
         <title>Grant Letter</title>
       </Head>
-      <Script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" strategy="afterInteractive" />
-
       <div
         style={{
           maxWidth: 900,
@@ -290,7 +303,7 @@ export default function GrantLetterView({
             {isAccepted ? 'This grant has already been accepted.' : isRejected ? 'This grant has been rejected.' : 'Review the full letter before taking action.'}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn btn-secondary btn-sm" onClick={generateGrantPDF}>Download PDF</button>
+            <button className="btn btn-secondary btn-sm" onClick={generateGrantPDF}>Print / Save as PDF</button>
             {!isFinal && (
               <>
                 <button className="btn btn-danger btn-sm" onClick={() => updateGrantStatus('rejected')} disabled={actionBusy}>Reject Grant</button>
