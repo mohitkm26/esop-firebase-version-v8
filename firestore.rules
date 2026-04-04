@@ -35,9 +35,11 @@ service cloud.firestore {
       allow write: if isSignedIn() && (request.auth.uid == uid || isSuperAdmin());
     }
     match /invites/{id} {
-      allow read: if isSignedIn() && (isSuperAdmin()
-        || (resource.data.companyId == getUser().companyId && isAdmin(getUser().companyId))
-        || resource.data.email == request.auth.token.email);
+  allow read: if isSignedIn() && (
+    request.auth.token.email == resource.data.email ||
+    isSuperAdmin() ||
+    (resource.data.companyId == getUser().companyId && isAdmin(getUser().companyId))
+  );
       allow create: if isSuperAdmin() || (isSignedIn() && isAdmin(request.resource.data.companyId));
       allow update, delete: if isSuperAdmin() || (isSignedIn() && isAdmin(resource.data.companyId));
     }
