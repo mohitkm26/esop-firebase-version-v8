@@ -4,7 +4,6 @@ import { auth, db } from '@/lib/firebase'
 import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
 import Link from 'next/link'
 import { findEmployeeEmailByPersonalId } from '@/lib/personal-id-lookup'
-import { db } from '@/lib/firebase'
 import { collection, getDocs, query, where, limit } from 'firebase/firestore'
 
 export default function Login() {
