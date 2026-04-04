@@ -34,27 +34,81 @@ export default function Login() {
     setLoading(false)
   }
 
-  async function emailAuth(e: React.FormEvent) {
-    e.preventDefault(); setLoading(true); setError('')
-    try {
-      const normalizedInput = identifier.trim().toLowerCase()
-      const isEmailInput = normalizedInput.includes('@')
-      if (mode === 'reset') {
-        if (!isEmailInput) {
-          setError('Password reset requires an email address.')
-          setLoading(false)
-          return
+ async function emailAuth(e: React.FormEvent) {
+  e.preventDefault(); setLoading(true); setError('')
+  try {
+    const normalizedInput = identifier.trim().toLowerCase()
+    const isEmailInput = normalizedInput.includes('@')
+
+    if (mode === 'reset') {
+      if (!isEmailInput) { setError('Password reset requires an email address.'); setLoading(false); return }
+      await sendPasswordResetEmail(auth, normalizedInput)
+      setMsg('Password reset email sent. Check your inbox.')
+      setMode('signin')
+
+    } else if (mode === 'signup') {
+      if (!isEmailInput) { setError('Signup requires a valid email address.'); setLoading(false); return }
+      await createUserWithEmailAndPassword(auth, normalizedInput, password)
+      router.replace('/')
+
+    } else {
+      const signInEmail = isEmailInput
+        ? normalizedInput
+        : await findEmployeeEmailByPersonalId(db, normalizedInput)
+
+      if (!signInEmail) {
+        setError('No employee record found for this Personal ID.')
+        setLoading(false)
+        return
+      }
+
+      try {
+        await signInWithEmailAndPassword(auth, signInEmail, password)
+        router.replace('/')
+      } catch (signInErr: any) {
+        if (signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential') {
+          // First-time invited user — verify against invite record then create account
+          const invSnap = await getDocs(query(
+            collection(db, 'invites'),
+            where('email', '==', signInEmail),
+            where('tempPassword', '==', password),
+            where('status', '==', 'pending'),
+            limit(1)
+          ))
+          if (invSnap.empty) {
+            setError('Invalid email or password.')
+          } else {
+            try {
+              await createUserWithEmailAndPassword(auth, signInEmail, password)
+              router.replace('/')
+            } catch (createErr: any) {
+              if (createErr.code === 'auth/email-already-in-use') {
+                setError('Account exists but password is wrong. Use "Forgot password?" to reset.')
+              } else {
+                setError(createErr.message || 'Could not create account. Contact your admin.')
+              }
+            }
+          }
+        } else {
+          const codes: Record<string, string> = {
+            'auth/wrong-password':    'Incorrect password.',
+            'auth/invalid-email':     'Please enter a valid email address.',
+            'auth/too-many-requests': 'Too many attempts. Please wait a moment.',
+          }
+          setError(codes[signInErr.code] || signInErr.message || 'Authentication failed.')
         }
-        await sendPasswordResetEmail(auth, normalizedInput)
-        setMsg('Password reset email sent. Check your inbox.')
-        setMode('signin')
-      } else if (mode === 'signup') {
-        if (!isEmailInput) {
-          setError('Signup requires a valid email address.')
-          setLoading(false)
-          return
-        }
-        await createUserWithEmailAndPassword(auth, normalizedInput, password)
+      }
+    }
+  } catch (e: any) {
+    const codes: Record<string, string> = {
+      'auth/email-already-in-use': 'This email is already registered.',
+      'auth/weak-password':        'Password must be at least 6 characters.',
+      'auth/invalid-email':        'Please enter a valid email address.',
+    }
+    setError(codes[e.code] || e.message || 'Authentication failed.')
+  }
+  setLoading(false)
+}        await createUserWithEmailAndPassword(auth, normalizedInput, password)
         router.replace('/')
       } else {
   const signInEmail = isEmailInput
