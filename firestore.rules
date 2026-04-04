@@ -1,6 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isSignedIn() { return request.auth != null; }
     function getUser() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
@@ -17,17 +18,26 @@ service cloud.firestore {
     function canEdit(companyId) {
       return belongsTo(companyId) && getUser().role in ['companyAdmin','hrAdmin','editor'];
     }
+    function canFinance(companyId) {
+      return belongsTo(companyId) && getUser().role in ['companyAdmin','financeAdmin'];
+    }
+    function isOwnEmployee(companyId, docId) {
+      return belongsTo(companyId) && getUser().role == 'employee' && getUser().employeeId == docId;
+    }
+    function isOwnGrant(companyId) {
+      return belongsTo(companyId) && getUser().role == 'employee'
+        && resource.data.employeeId == getUser().employeeId;
+    }
 
     match /users/{uid} {
-      allow read: if isSignedIn() && (request.auth.uid == uid || isSuperAdmin());
+      allow read: if isSignedIn() && (request.auth.uid == uid || isSuperAdmin()
+        || (getUser().companyId == resource.data.companyId && isAdmin(getUser().companyId)));
       allow write: if isSignedIn() && (request.auth.uid == uid || isSuperAdmin());
     }
     match /invites/{id} {
-      allow read: if isSignedIn() && (
-        isSuperAdmin() ||
-        resource.data.companyId == getUser().companyId ||
-        resource.data.email == request.auth.token.email
-      );
+      allow read: if isSignedIn() && (isSuperAdmin()
+        || (resource.data.companyId == getUser().companyId && isAdmin(getUser().companyId))
+        || resource.data.email == request.auth.token.email);
       allow create: if isSuperAdmin() || (isSignedIn() && isAdmin(request.resource.data.companyId));
       allow update, delete: if isSuperAdmin() || (isSignedIn() && isAdmin(resource.data.companyId));
     }
@@ -35,46 +45,103 @@ service cloud.firestore {
       allow create: if true;
       allow read, update, delete: if isSuperAdmin();
     }
+    match /platform_plans/{id} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+    match /platform_cohorts/{id} {
+      allow read, write: if isSuperAdmin();
+    }
+    match /platform_invoices/{id} {
+      allow read: if isSuperAdmin()
+        || (isSignedIn() && resource.data.companyId == getUser().companyId && isAdmin(getUser().companyId));
+      allow write: if isSuperAdmin();
+    }
+    match /os_team/{uid} {
+      allow read, write: if isSuperAdmin();
+    }
+    match /cms_content/{id} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+    match /blog_posts/{id} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
     match /companies/{companyId} {
       allow read: if belongsTo(companyId) || isSuperAdmin();
       allow write: if isAdmin(companyId) || isSuperAdmin();
-      match /employees/{docId} {
+      match /settings/{docId} {
         allow read: if belongsTo(companyId) || isSuperAdmin();
+        allow write: if isAdmin(companyId) || isSuperAdmin();
+      }
+      match /employees/{docId} {
+        allow read: if isSuperAdmin()
+          || (belongsTo(companyId) && getUser().role != 'employee')
+          || isOwnEmployee(companyId, docId);
         allow write: if canEdit(companyId) || isSuperAdmin();
       }
       match /grants/{docId} {
-        allow read: if belongsTo(companyId) || isSuperAdmin();
-        allow create: if canEdit(companyId);
-        allow update: if canEdit(companyId) && (!resource.data.locked || isSuperAdmin());
+        allow read: if isSuperAdmin()
+          || (belongsTo(companyId) && getUser().role != 'employee')
+          || isOwnGrant(companyId);
+        allow create: if canEdit(companyId) || isSuperAdmin();
+        allow update: if (canEdit(companyId) && (!resource.data.locked || isSuperAdmin()))
+          || (isOwnGrant(companyId) &&
+              request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['status','acceptedAt','rejectedAt','rejectionReason','acceptedBy','locked','updatedAt']));
         allow delete: if isAdmin(companyId) || isSuperAdmin();
       }
       match /vestingEvents/{docId} {
-        allow read, write: if belongsTo(companyId) || isSuperAdmin();
+        allow read: if isSuperAdmin()
+          || (belongsTo(companyId) && getUser().role != 'employee')
+          || (belongsTo(companyId) && getUser().role == 'employee'
+              && resource.data.employeeId == getUser().employeeId);
+        allow write: if canEdit(companyId) || canFinance(companyId) || isSuperAdmin();
       }
       match /exercises/{docId} {
-        allow read: if belongsTo(companyId) || isSuperAdmin();
-        allow write: if isAdmin(companyId) || 
-          (belongsTo(companyId) && getUser().role == 'financeAdmin') || isSuperAdmin();
+        allow read: if isSuperAdmin()
+          || (belongsTo(companyId) && getUser().role != 'employee')
+          || (belongsTo(companyId) && getUser().role == 'employee'
+              && resource.data.employeeId == getUser().employeeId);
+        allow write: if isAdmin(companyId) || canFinance(companyId) || isSuperAdmin();
       }
       match /valuations/{docId} {
         allow read: if belongsTo(companyId) || isSuperAdmin();
-        allow write: if isAdmin(companyId) || 
-          (belongsTo(companyId) && getUser().role == 'financeAdmin') || isSuperAdmin();
+        allow write: if isAdmin(companyId) || canFinance(companyId) || isSuperAdmin();
       }
       match /auditLogs/{docId} {
-        allow read: if belongsTo(companyId) || isSuperAdmin();
+        allow read: if isSuperAdmin()
+          || (belongsTo(companyId) && getUser().role in ['companyAdmin','auditor']);
         allow create: if belongsTo(companyId) || isSuperAdmin();
+        allow update, delete: if false;
       }
       match /notifications/{docId} {
-        allow read: if isSignedIn() && 
+        allow read: if isSignedIn() &&
           (resource.data.userId == request.auth.uid || isAdmin(companyId) || isSuperAdmin());
         allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
         allow create: if belongsTo(companyId) || isSuperAdmin();
+        allow delete: if false;
+      }
+      match /emailTemplates/{docId} {
+        allow read: if belongsTo(companyId) || isSuperAdmin();
+        allow write: if isAdmin(companyId) || isSuperAdmin();
+      }
+      match /roleDefinitions/{docId} {
+        allow read: if belongsTo(companyId) || isSuperAdmin();
+        allow write: if isAdmin(companyId) || isSuperAdmin();
+      }
+      match /esopPool/{docId} {
+        allow read: if belongsTo(companyId) || isSuperAdmin();
+        allow write: if isAdmin(companyId) || isSuperAdmin();
       }
       match /tickets/{docId} {
         allow read: if belongsTo(companyId) || isSuperAdmin();
         allow create: if belongsTo(companyId);
-        allow update: if isAdmin(companyId) || isSuperAdmin();
+        allow update: if isAdmin(companyId) || isSuperAdmin()
+          || (belongsTo(companyId) &&
+              request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['replies','updatedAt','lastReplyByUser']));
       }
     }
   }
