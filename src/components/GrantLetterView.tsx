@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Head from 'next/head'
-import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
+import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth-context'
 import { fmtC, fmtDate, fmtN } from '@/lib/utils'
+import CompanyLetterhead from '@/components/CompanyLetterhead'
 
 type VestingRow = {
   id?: string
@@ -13,6 +14,16 @@ type VestingRow = {
   quantity?: number
 }
 
+
+
+type BrandingConfig = {
+  logoUrl?: string
+  companyName?: string
+  address?: string
+  website?: string
+  email?: string
+  footerText?: string
+}
 type Props = {
   grant: any
   employee: any
@@ -46,8 +57,35 @@ export default function GrantLetterView({
   const { user, profile } = useAuth()
   const [actionBusy, setActionBusy] = useState(false)
   const [toast, setToast] = useState('')
+  const [branding, setBranding] = useState<BrandingConfig>({})
 
   const grantDocPathCompanyId = companyId || profile?.companyId || grant?.companyId || company?.id
+
+
+  useEffect(() => {
+    if (!grantDocPathCompanyId) return
+
+    const loadBranding = async () => {
+      const [brandingSnap, companySnap] = await Promise.all([
+        getDoc(doc(db, 'companies', grantDocPathCompanyId, 'settings', 'branding')),
+        getDoc(doc(db, 'companies', grantDocPathCompanyId)),
+      ])
+
+      const brandingData = brandingSnap.exists() ? brandingSnap.data() : {}
+      const companyData = companySnap.exists() ? companySnap.data() : {}
+
+      setBranding({
+        logoUrl: brandingData.logoUrl || company?.logoUrl || companyData.logoUrl || '',
+        companyName: brandingData.companyName || company?.companyName || company?.name || companyData.companyName || companyData.name || 'Company',
+        address: brandingData.address || company?.address || companyData.address || '',
+        website: brandingData.website || company?.website || companyData.website || '',
+        email: brandingData.email || company?.email || company?.contactEmail || companyData.email || companyData.contactEmail || '',
+        footerText: brandingData.footerText || company?.footerText || companyData.footerText || '',
+      })
+    }
+
+    loadBranding()
+  }, [grantDocPathCompanyId, company])
 
   const schedule = useMemo(() => {
     if (vestingEvents.length > 0) {
@@ -213,10 +251,7 @@ export default function GrantLetterView({
           }}
         >
           <div className="pdf-content">
-            <div style={{ marginBottom: 20 }}>
-              <h2 style={{ marginBottom: 6 }}>{company?.companyName || company?.name || 'Company'}</h2>
-              <div style={{ fontSize: 13, color: 'var(--text2)' }}>{company?.address || '—'}</div>
-            </div>
+            <CompanyLetterhead branding={branding} />
 
             <h3 style={{ marginBottom: 10 }}>Grant Details</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, marginBottom: 20 }}>
@@ -281,6 +316,12 @@ export default function GrantLetterView({
                 <h3 style={{ marginBottom: 8 }}>Annexure / Terms</h3>
                 <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text2)' }}>{company.tandcTemplate}</div>
               </>
+            )}
+
+            {branding?.footerText && (
+              <div style={{ borderTop: '1px solid var(--border)', marginTop: 30, paddingTop: 10, fontSize: 12, color: 'var(--text2)' }}>
+                {branding.footerText}
+              </div>
             )}
           </div>
         </div>
