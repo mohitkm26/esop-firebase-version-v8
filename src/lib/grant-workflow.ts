@@ -21,22 +21,19 @@ export async function routeGrantForApproval(input: GrantMailInput, company: any)
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
   const approvalLink = `${baseUrl}/signatory-approval?companyId=${encodeURIComponent(input.companyId)}&grantId=${encodeURIComponent(input.grantId)}`
-  const emailRes = await fetch('/api/send-email', {
+  await fetch('/api/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      type: 'rendered',
+      type: 'custom',
       to: company.signatoryEmail,
       subject: `Signatory approval required: ${input.grant.grantNumber}`,
       html: `<p>Dear ${company.signatoryName || 'Authorised Signatory'},</p>
              <p>Please review and approve grant letter <strong>${input.grant.grantNumber}</strong> for ${input.employeeName}.</p>
              <p><a href="${approvalLink}">Open Approval Link</a></p>
              <p>You will verify using OTP before release to employee.</p>`,
-      text: `Signatory approval required for ${input.grant.grantNumber}. Open: ${approvalLink}`,
     }),
   })
-  const emailResult = await emailRes.json().catch(() => ({}))
-  if (!emailRes.ok) throw new Error(emailResult?.error || 'Failed to send signatory approval email')
   await updateDoc(grantRef, {
     status: 'pending_signatory_approval',
     signatoryApprovalStatus: 'pending',
