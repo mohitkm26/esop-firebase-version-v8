@@ -160,12 +160,14 @@ export function buildGrantLetterHTML(params: {
   vestingSchedule: Array<{date:string,quantity:number}>
   companyName: string; notes?: string
   signatoryName?: string; signatoryTitle?: string
-  logoUrl?: string; letterheadUrl?: string; address?: string; tandc?: string
+  logoUrl?: string; letterheadUrl?: string; address?: string; website?: string
+  footerMeta?: { gstin?: string; cin?: string }
+  tandc?: string
   acceptedAt?: string | Date | { toDate?: () => Date } | null
 }) {
   const { grantNumber,employeeName,employeeCode,grantDate,totalOptions,exercisePrice,
     vestingSchedule,companyName,notes,signatoryName,signatoryTitle,
-    logoUrl,letterheadUrl,address,tandc,acceptedAt } = params
+    logoUrl,letterheadUrl,address,website,footerMeta,tandc,acceptedAt } = params
   const rows = vestingSchedule.reduce((acc:{html:string,cum:number},ev) => {
     acc.cum += ev.quantity
     acc.html += `<tr><td style="padding:8px 12px;border-bottom:1px solid #eee">${fmtDate(ev.date)}</td>
@@ -190,38 +192,99 @@ export function buildGrantLetterHTML(params: {
   const acceptedStamp = hasAcceptedDate
     ? `✅ Digitally accepted on ${acceptedDate!.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })} & ${acceptedDate!.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', hour12:false })}`
     : ''
+  const footerLine = [address, footerMeta?.gstin ? `GSTIN: ${footerMeta.gstin}` : '', footerMeta?.cin ? `CIN: ${footerMeta.cin}` : '']
+    .filter(Boolean)
+    .join(' | ')
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
-  body{font-family:Georgia,serif;max-width:750px;margin:40px auto;color:#1a1714;line-height:1.8;font-size:14px}
-  h1{font-size:22px;margin:0}
-  .header{border-bottom:3px solid #c8922a;padding-bottom:20px;margin-bottom:30px;display:flex;align-items:flex-start;gap:16px}
-  .letterhead{width:100%;margin-bottom:20px;display:block}
+  @page { margin: 120px 40px 100px 40px; }
+  * { box-sizing: border-box; }
+  body{
+    margin:0;
+    font-family:Arial,sans-serif;
+    color:#1a1714;
+    font-size:12px;
+    line-height:1.5;
+  }
+  .header{
+    position:fixed;
+    top:-100px;
+    left:0;
+    right:0;
+    height:80px;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    border-bottom:2px solid #c8922a;
+    padding:10px 0 12px;
+    gap:12px;
+    background:#fff;
+  }
+  .header-left{display:flex;align-items:center;min-width:0}
+  .header-logo{
+    max-height:58px;
+    max-width:180px;
+    width:auto;
+    object-fit:contain;
+    filter:none;
+    -webkit-filter:none;
+  }
+  .header-right{margin-left:auto;text-align:right}
+  .header-right h1{font-size:18px;line-height:1.2;margin:0}
+  .header-right p{margin:3px 0 0;color:#4a4a4a;font-size:11px}
+  .footer{
+    position:fixed;
+    bottom:-80px;
+    left:0;
+    right:0;
+    height:60px;
+    border-top:1px solid #dedede;
+    text-align:center;
+    font-size:10px;
+    color:#5a5a5a;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#fff;
+    padding:0 8px;
+  }
+  .content{font-family:Arial,sans-serif;font-size:12px;line-height:1.5}
+  h2{font-size:20px;margin:0 0 2px}
+  h3{font-size:14px;margin:24px 0 10px;color:#8f6115}
   table{width:100%;border-collapse:collapse}
-  th{background:#fdf6ec;padding:8px 12px;text-align:left;border-bottom:2px solid #c8922a}
-  .meta td{padding:8px 14px;font-size:13px}
+  th{background:#fdf6ec;padding:8px 10px;text-align:left;border-bottom:2px solid #c8922a}
+  td{vertical-align:top}
+  table,.section,.sig,.accept,.annexure{page-break-inside:avoid;break-inside:avoid}
+  .meta td{padding:8px 10px;border-bottom:1px solid #eee}
+  .meta td:first-child{width:34%;font-weight:600}
   .meta tr:nth-child(even){background:#fdf8f2}
-  .highlight td{background:#c8922a;color:white;font-weight:bold;font-size:16px;padding:10px 14px}
-  .note{margin:20px 0;padding:12px 16px;background:#fffbf0;border-left:3px solid #c8922a}
-  .sig{margin-top:60px}
-  .sig-box{display:inline-block;min-width:200px;border-top:1px solid #333;padding-top:8px;margin-top:60px}
-  .accept{margin-top:50px;padding:20px;border:1px dashed #999;border-radius:8px;background:#fafaf8}
-  .annexure{margin-top:46px;border-top:2px solid #c8922a;padding-top:16px}
-  @media print { body{margin:20px} }
+  .highlight td{background:#c8922a;color:#fff;font-weight:700;font-size:13px}
+  .note{margin:18px 0;padding:10px 12px;background:#fffbf0;border-left:3px solid #c8922a}
+  .sig{margin-top:42px}
+  .sig-box{display:inline-block;min-width:230px;border-top:1px solid #333;padding-top:8px;margin-top:40px}
+  .accept{margin-top:28px;padding:14px;border:1px dashed #999;border-radius:8px;background:#fafaf8}
+  .annexure{margin-top:30px;border-top:1px solid #c8922a;padding-top:14px}
+  .letterhead{width:100%;max-height:100px;object-fit:contain;margin-bottom:14px;filter:none;-webkit-filter:none}
 </style></head><body>
-${letterheadUrl ? `<img src="${letterheadUrl}" class="letterhead" alt="letterhead"/>` : ''}
 <div class="header">
-  ${logoUrl ? `<img src="${logoUrl}" style="height:60px;object-fit:contain" alt="logo"/>` : ''}
-  <div>
+  <div class="header-left">
+    ${logoUrl ? `<img src="${logoUrl}" class="header-logo" alt="logo"/>` : ''}
+  </div>
+  <div class="header-right">
     <h1>${companyName}</h1>
-    ${address ? `<p style="color:#555;margin:4px 0 0;font-size:12px">${address}</p>` : ''}
-    <p style="color:#555;margin:4px 0 0">Employee Stock Option Grant Letter</p>
+    ${address ? `<p>${address}</p>` : ''}
+    ${website ? `<p>${website}</p>` : ''}
   </div>
 </div>
-<p>Date: <strong>${fmtDate(today())}</strong> &nbsp;|&nbsp; Ref: <strong>${grantNumber}</strong></p>
-<p>Dear <strong>${employeeName}</strong>,</p>
-<p>We are pleased to inform you that the Board of Directors of <strong>${companyName}</strong> has approved the grant of Employee Stock Options to you under the Company's ESOP Plan.</p>
-<table class="meta" style="margin:24px 0">
+<div class="footer">${footerLine || '&nbsp;'}</div>
+<div class="content">
+${letterheadUrl ? `<img src="${letterheadUrl}" class="letterhead" alt="letterhead"/>` : ''}
+<p style="margin:0 0 14px">Date: <strong>${fmtDate(today())}</strong> &nbsp;|&nbsp; Ref: <strong>${grantNumber}</strong></p>
+<h2>Employee Stock Option Grant Letter</h2>
+<p style="margin:0 0 14px">Dear <strong>${employeeName}</strong>,</p>
+<p class="section">We are pleased to inform you that the Board of Directors of <strong>${companyName}</strong> has approved the grant of Employee Stock Options to you under the Company's ESOP Plan.</p>
+<table class="meta section" style="margin:18px 0 8px">
   <tr><td><strong>Employee Name</strong></td><td>${employeeName}</td></tr>
   <tr><td><strong>Employee Code</strong></td><td>${employeeCode}</td></tr>
   <tr><td><strong>Grant Reference</strong></td><td>${grantNumber}</td></tr>
@@ -229,8 +292,8 @@ ${letterheadUrl ? `<img src="${letterheadUrl}" class="letterhead" alt="letterhea
   <tr><td><strong>Exercise Price</strong></td><td>${fmtC(exercisePrice)} per option</td></tr>
   <tr class="highlight"><td>Total Options Granted</td><td>${fmtN(totalOptions)}</td></tr>
 </table>
-<h3 style="border-bottom:2px solid #c8922a;padding-bottom:8px">Vesting Schedule</h3>
-<table><thead><tr><th>Vesting Date</th><th style="text-align:right">Options</th><th style="text-align:right">Cumulative</th></tr></thead>
+<h3>Vesting Schedule</h3>
+<table class="section"><thead><tr><th>Vesting Date</th><th style="text-align:right">Options</th><th style="text-align:right">Cumulative</th></tr></thead>
 <tbody>${rows}</tbody></table>
 ${notes ? `<div class="note"><strong>Notes:</strong> ${notes}</div>` : ''}
 <div class="sig">
@@ -251,10 +314,37 @@ ${notes ? `<div class="note"><strong>Notes:</strong> ${notes}</div>` : ''}
   </tr></table>
 </div>
 <div class="annexure">
-  <h3 style="margin:0 0 10px;color:#c8922a">Annexure A — Terms and Conditions</h3>
+  <h3 style="margin-top:0">Annexure A — Terms and Conditions</h3>
   <div style="white-space:normal">${tandcFormatted}</div>
 </div>
+</div>
 </body></html>`
+}
+
+export function grantLetterPdfOptions() {
+  return {
+    format: 'A4',
+    printBackground: true,
+    margin: {
+      top: '120px',
+      bottom: '100px',
+      left: '40px',
+      right: '40px'
+    }
+  }
+}
+
+export async function renderGrantLetterPdf(
+  page: {
+    setContent: (html: string, options?: { waitUntil?: 'networkidle0' | 'load' }) => Promise<void>
+    emulateMediaType?: (type: 'print' | 'screen') => Promise<void>
+    pdf: (options: ReturnType<typeof grantLetterPdfOptions>) => Promise<Uint8Array | Buffer>
+  },
+  html: string
+) {
+  await page.setContent(html, { waitUntil: 'networkidle0' })
+  if (page.emulateMediaType) await page.emulateMediaType('print')
+  return page.pdf(grantLetterPdfOptions())
 }
 
 // ── CSV utils ──────────────────────────────────────────────────────────────────
