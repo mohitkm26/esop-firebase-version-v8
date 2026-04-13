@@ -13,6 +13,7 @@ import GrantLetterView from '@/components/GrantLetterView'
 
 const STATUS_BADGE: Record<string, string> = {
   draft: 'badge badge-muted', issued: 'badge badge-blue', pending_acceptance: 'badge badge-blue',
+  pending_signatory_approval: 'badge badge-blue',
   accepted: 'badge badge-green', active: 'badge badge-green', exercised: 'badge badge-purple',
   expired: 'badge badge-red', cancelled: 'badge badge-red', rejected: 'badge badge-red'
 }
@@ -279,7 +280,7 @@ export default function GrantDetail() {
             <h3 className="section-title mb-3">Actions</h3>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {grant.status === 'draft' && <button onClick={() => updateStatus('issued')} disabled={saving} className="btn btn-primary btn-sm">→ Issue Grant</button>}
-              {['draft', 'issued', 'pending_acceptance'].includes(grant.status) && (
+              {['draft', 'issued', 'pending_acceptance', 'pending_signatory_approval'].includes(grant.status) && (
                 <button onClick={() => setShowAcceptModal(true)} className="btn btn-success btn-sm">✓ Mark Accepted (offline signed)</button>
               )}
               {['accepted', 'active'].includes(grant.status) && <button onClick={() => setShowExForm(true)} className="btn btn-primary btn-sm">💰 Record Exercise</button>}

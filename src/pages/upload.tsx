@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { db } from '@/lib/firebase'
-import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp, writeBatch } from 'firebase/firestore'
+import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp, writeBatch, getDoc } from 'firebase/firestore'
 import { useAuth } from '@/lib/auth-context'
 import { usePlan } from '@/lib/plan-context'
 import Layout from '@/components/layout/Layout'
 import { smartSplit, parseFlexDate, computeVestingStatus, generateGrantNumber, downloadBlob, today } from '@/lib/utils'
 import { logAudit } from '@/lib/audit'
-import { sendGrantLetterEmail } from '@/lib/email'
 import { generateScheduleFromPlan } from '@/pages/grants/new'
+import { routeGrantForApproval } from '@/lib/grant-workflow'
 import type { ESOPPlan } from '@/pages/settings/esop-plans'
 
 type Mode = 'employees' | 'grants'
@@ -230,12 +230,19 @@ export default function Upload() {
     if (!selectedDrafts.size) { alert('Select at least one grant'); return }
     setBulkProcessing(true); setBulkDone(0)
     const grantsToProcess = draftGrants.filter(g => selectedDrafts.has(g.id))
+    const companySnap = await getDoc(doc(db, 'companies', companyId))
+    const company = companySnap.exists() ? companySnap.data() : {}
 
     for (const g of grantsToProcess) {
       try {
         if (bulkAction === 'send_email') {
-          await sendGrantLetterEmail({ to: g.employeeEmail, employeeName: g.employeeName, companyId, grant: { grantNumber: g.grantNumber, grantDate: g.grantDate, grantType: g.grantType, totalOptions: g.totalOptions, exercisePrice: g.exercisePrice } })
-          await updateDoc(doc(db, 'companies', companyId, 'grants', g.id), { status: 'issued', issuedAt: serverTimestamp(), updatedAt: serverTimestamp() })
+          await routeGrantForApproval({
+            companyId,
+            grantId: g.id,
+            employeeEmail: g.employeeEmail,
+            employeeName: g.employeeName,
+            grant: { grantNumber: g.grantNumber, grantDate: g.grantDate, grantType: g.grantType, totalOptions: g.totalOptions, exercisePrice: g.exercisePrice }
+          }, company)
         } else if (bulkAction === 'mark_sent') {
           await updateDoc(doc(db, 'companies', companyId, 'grants', g.id), { status: 'issued', issuedAt: serverTimestamp(), updatedAt: serverTimestamp() })
         } else if (bulkAction === 'mark_accepted') {

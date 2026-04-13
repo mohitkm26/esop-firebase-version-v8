@@ -9,7 +9,7 @@ import { generateGrantNumber, parseFlexDate, computeVestingStatus, today, fmtN }
 import { logAudit } from '@/lib/audit'
 import { createNotification } from '@/lib/utils'
 import { canEdit } from '@/lib/roles'
-import { sendGrantLetterEmail } from '@/lib/email'
+import { routeGrantForApproval } from '@/lib/grant-workflow'
 import type { ESOPPlan } from '@/pages/settings/esop-plans'
 
 type VestRow = { date: string; qty: string }
@@ -157,7 +157,7 @@ export default function NewGrant() {
         cliffVestingPct: selectedPlan?.cliffVestingPct || 25,
         fmvAtGrant: latestFMV,
         totalGrantValue: latestFMV * totalOptions,
-        status: 'issued', locked: false, notes: form.notes || null, companyId,
+        status: 'draft', locked: false, notes: form.notes || null, companyId,
         expiresAt: expiresAt.toISOString(), exercised: 0,
         createdBy: user!.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       })
@@ -177,7 +177,13 @@ export default function NewGrant() {
         })
       }
       await batch.commit()
-      sendGrantLetterEmail({ to: selEmp.email, employeeName: selEmp.name, companyId, grant: { grantNumber, grantDate: form.grantDate, grantType: form.grantType, totalOptions, exercisePrice } }).catch(console.error)
+      await routeGrantForApproval({
+        companyId,
+        grantId: grantRef.id,
+        employeeEmail: selEmp.email,
+        employeeName: selEmp.name,
+        grant: { grantNumber, grantDate: form.grantDate, grantType: form.grantType, totalOptions, exercisePrice }
+      }, company)
       await logAudit({ companyId, userId: user!.uid, userEmail: profile?.email || '', action: 'grant_created', entityType: 'grant', entityId: grantRef.id, entityLabel: grantNumber, after: { grantNumber, totalOptions, status: 'issued' } })
       router.push(`/grants/${grantRef.id}`)
     } catch (e: any) { alert('Error: ' + e.message); setSaving(false) }
