@@ -7,7 +7,7 @@ import { fmtC, fmtDate, fmtN } from '@/lib/utils'
 import CompanyLetterhead from '@/components/CompanyLetterhead'
 
 type VestingRow = { id?: string; vestDate?: string; date?: string; optionsCount?: number; quantity?: number }
-type BrandingConfig = { logoUrl?: string; companyName?: string; address?: string; website?: string; email?: string; footerText?: string; signatoryName?: string; signatoryTitle?: string; tandcTemplate?: string }
+type BrandingConfig = { logoUrl?: string; companyName?: string; address?: string; website?: string; email?: string; footerText?: string; signatoryName?: string; signatoryTitle?: string; signatorySignatureUrl?: string; tandcTemplate?: string }
 type Props = {
   grant: any; employee: any; company: any
   vestingEvents?: VestingRow[]; companyId?: string
@@ -56,6 +56,7 @@ export default function GrantLetterView({ grant, employee, company, vestingEvent
         footerText: (b as any).footerText || '',
         signatoryName: (c as any).signatoryName || '',
         signatoryTitle: (c as any).signatoryTitle || '',
+        signatorySignatureUrl: (c as any).signatorySignatureUrl || '',
         tandcTemplate: (c as any).tandcTemplate || '',
       })
     }
@@ -207,6 +208,9 @@ export default function GrantLetterView({ grant, employee, company, vestingEvent
           <div style={{ marginBottom: 24 }}>
             <p>For and on behalf of {branding.companyName}</p>
             <div style={{ marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 8, display: 'inline-block', minWidth: 200 }}>
+              {branding.signatorySignatureUrl && (
+                <img src={branding.signatorySignatureUrl} alt="Signatory signature" style={{ height: 56, objectFit: 'contain', marginBottom: 8 }} />
+              )}
               <div style={{ fontWeight: 600 }}>{branding.signatoryName || '________________'}</div>
               <div style={{ fontSize: 12, color: 'var(--text2)' }}>{branding.signatoryTitle || '________________'}</div>
             </div>
