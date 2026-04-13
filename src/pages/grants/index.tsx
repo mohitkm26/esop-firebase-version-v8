@@ -10,6 +10,7 @@ import { fmtDate, fmtN, downloadBlob } from '@/lib/utils'
 
 const STATUS_BADGE: Record<string,string> = {
   draft:'badge badge-muted', issued:'badge badge-blue', pending_acceptance:'badge badge-blue',
+  pending_signatory_approval:'badge badge-blue',
   accepted:'badge badge-green', active:'badge badge-green', exercised:'badge badge-purple',
   expired:'badge badge-red', cancelled:'badge badge-red'
 }
@@ -74,7 +75,7 @@ export default function Grants() {
           <input className="input" style={{ maxWidth:280 }} placeholder="Search grant # or employee..." value={search} onChange={e=>setSearch(e.target.value)}/>
           <select className="input" style={{ maxWidth:200 }} value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
             <option value="all">All Status</option>
-            {['draft','issued','pending_acceptance','accepted','active','exercised','expired','cancelled'].map(s=>(
+            {['draft','pending_signatory_approval','issued','pending_acceptance','accepted','active','exercised','expired','cancelled'].map(s=>(
               <option key={s} value={s}>{s.replace(/_/g,' ')}</option>
             ))}
           </select>

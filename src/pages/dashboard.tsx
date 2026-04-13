@@ -50,6 +50,7 @@ export default function Dashboard() {
 
   const STATUS_BADGE: Record<string,string> = {
     draft:'badge badge-muted', issued:'badge badge-blue', pending_acceptance:'badge badge-blue',
+    pending_signatory_approval:'badge badge-blue',
     accepted:'badge badge-green', active:'badge badge-green', exercised:'badge badge-purple',
     expired:'badge badge-red', cancelled:'badge badge-red'
   }

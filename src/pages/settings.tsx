@@ -34,7 +34,11 @@ export default function Settings() {
   const [logoUploading, setLogoUploading] = useState(false)
   const [templateUploading, setTemplateUploading] = useState(false)
 
-  const [gen, setGen] = useState({ name: '', address: '', cin: '', pan: '', contactEmail: '', contactPhone: '', signatoryName: '', signatoryTitle: '' })
+  const [gen, setGen] = useState({
+    name: '', address: '', cin: '', pan: '', contactEmail: '', contactPhone: '',
+    signatoryName: '', signatoryTitle: '', signatoryEmail: '',
+    requireSignatoryApproval: false, signatorySignatureUrl: '',
+  })
   const [vest, setVest] = useState({ vestingCliff: '12', vestingPeriod: '48', exerciseWindowDays: '90', grantExpiryDays: '30', autoAcceptDays: '0', tandcTemplate: DEFAULT_TERMS })
   const [pool, setPool] = useState({ boardApprovedShares: '', boardResolutionRef: '', effectiveDate: '' })
   const [emailCfg, setEmailCfg] = useState({ smtpHost: '', smtpPort: '587', smtpUser: '', smtpPassword: '', fromName: '', fromEmail: '' })
@@ -53,7 +57,14 @@ export default function Settings() {
       const b = bSnap.exists() ? bSnap.data() as any : {}
       const e = eSnap.exists() ? eSnap.data() as any : {}
       const p = poolSnap.exists() ? poolSnap.data() as any : {}
-      setGen({ name: c.name || c.companyName || '', address: c.address || '', cin: c.cin || '', pan: c.pan || '', contactEmail: c.contactEmail || '', contactPhone: c.contactPhone || '', signatoryName: c.signatoryName || '', signatoryTitle: c.signatoryTitle || '' })
+      setGen({
+        name: c.name || c.companyName || '', address: c.address || '', cin: c.cin || '', pan: c.pan || '',
+        contactEmail: c.contactEmail || '', contactPhone: c.contactPhone || '',
+        signatoryName: c.signatoryName || '', signatoryTitle: c.signatoryTitle || '',
+        signatoryEmail: c.signatoryEmail || '',
+        requireSignatoryApproval: !!c.requireSignatoryApproval,
+        signatorySignatureUrl: c.signatorySignatureUrl || '',
+      })
       setVest({ vestingCliff: String(c.vestingCliff || 12), vestingPeriod: String(c.vestingPeriod || 48), exerciseWindowDays: String(c.exerciseWindowDays || 90), grantExpiryDays: String(c.grantExpiryDays || 30), autoAcceptDays: String(c.autoAcceptDays || 0), tandcTemplate: c.tandcTemplate || DEFAULT_TERMS })
       setBranding({ logoUrl: b.logoUrl || c.logoUrl || '', companyName: b.companyName || c.companyName || '', website: b.website || c.website || '', footerText: b.footerText || '' })
       setEmailCfg({ smtpHost: e.smtpHost || '', smtpPort: String(e.smtpPort || 587), smtpUser: e.smtpUser || '', smtpPassword: '', fromName: e.fromName || '', fromEmail: e.fromEmail || '' })
@@ -63,7 +74,14 @@ export default function Settings() {
 
   async function saveGeneral() {
     setSaving(true)
-    await setDoc(doc(db, 'companies', companyId), { name: gen.name, companyName: gen.name, address: gen.address, cin: gen.cin, pan: gen.pan, contactEmail: gen.contactEmail, contactPhone: gen.contactPhone, signatoryName: gen.signatoryName, signatoryTitle: gen.signatoryTitle, updatedAt: new Date().toISOString() }, { merge: true })
+    await setDoc(doc(db, 'companies', companyId), {
+      name: gen.name, companyName: gen.name, address: gen.address, cin: gen.cin, pan: gen.pan,
+      contactEmail: gen.contactEmail, contactPhone: gen.contactPhone,
+      signatoryName: gen.signatoryName, signatoryTitle: gen.signatoryTitle, signatoryEmail: gen.signatoryEmail,
+      requireSignatoryApproval: !!gen.requireSignatoryApproval,
+      signatorySignatureUrl: gen.signatorySignatureUrl || '',
+      updatedAt: new Date().toISOString()
+    }, { merge: true })
     await logAudit({ companyId, userId: user!.uid, userEmail: profile?.email || '', entityType: 'company', entityId: companyId, entityLabel: 'Settings', action: 'company_updated' })
     await refreshCompany(); done()
   }
@@ -105,6 +123,15 @@ export default function Settings() {
     setLogoUploading(false)
   }
 
+  async function uploadSignatorySignature(file: File) {
+    setLogoUploading(true)
+    const r = ref(storage, `companies/${companyId}/signatory-signature-${Date.now()}.${file.name.split('.').pop()}`)
+    await uploadBytes(r, file)
+    const url = await getDownloadURL(r)
+    setGen(g => ({ ...g, signatorySignatureUrl: url }))
+    setLogoUploading(false)
+  }
+
   const TABS: { id: Tab; label: string }[] = [
     { id: 'general', label: '🏢 General' }, { id: 'vesting', label: '📅 Vesting & Grants' },
     { id: 'letterhead', label: '🖼 Letterhead' }, { id: 'pool', label: '🏦 ESOP Pool' },
@@ -141,7 +168,29 @@ export default function Settings() {
                 <div><label className="label">Contact Phone</label><input className="input" value={gen.contactPhone} onChange={e => setGen(g => ({ ...g, contactPhone: e.target.value }))} /></div>
                 <div><label className="label">Signatory Name</label><input className="input" value={gen.signatoryName} onChange={e => setGen(g => ({ ...g, signatoryName: e.target.value }))} placeholder="e.g. Rajesh Kumar" /></div>
                 <div><label className="label">Signatory Title</label><input className="input" value={gen.signatoryTitle} onChange={e => setGen(g => ({ ...g, signatoryTitle: e.target.value }))} placeholder="e.g. Chief Executive Officer" /></div>
+                <div><label className="label">Signatory Email</label><input className="input" type="email" value={gen.signatoryEmail} onChange={e => setGen(g => ({ ...g, signatoryEmail: e.target.value }))} placeholder="e.g. ceo@company.com" /></div>
               </div>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 12 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+                  <input type="checkbox" checked={gen.requireSignatoryApproval} onChange={e => setGen(g => ({ ...g, requireSignatoryApproval: e.target.checked }))} />
+                  Whether each approval of grant letter needs signatory OTP approval first
+                </label>
+                <div className="text-xs text-muted mt-1">
+                  If enabled, every grant is first sent to signatory email for OTP-based approval, then to employee.
+                </div>
+              </div>
+              {!gen.requireSignatoryApproval && (
+                <div>
+                  <label className="label">Authorised Signatory Signature Image (optional)</label>
+                  {gen.signatorySignatureUrl && (
+                    <img src={gen.signatorySignatureUrl} alt="signatory signature" style={{ height: 60, objectFit: 'contain', marginBottom: 8, display: 'block' }} />
+                  )}
+                  <label className="btn btn-ghost btn-sm" style={{ cursor: 'pointer' }}>
+                    {logoUploading ? '⏳ Uploading...' : '✍️ Upload Signature'}
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => e.target.files?.[0] && uploadSignatorySignature(e.target.files[0])} />
+                  </label>
+                </div>
+              )}
               <button onClick={saveGeneral} disabled={saving} className="btn btn-primary">{saving ? '⏳...' : '💾 Save'}</button>
             </div>
           </div>
